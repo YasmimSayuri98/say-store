@@ -1,0 +1,341 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CategoriaMaterial {
+  id        Int        @id @default(autoincrement())
+  nome      String     @unique
+  materiais Material[]
+}
+
+model UnidadeMedida {
+  id        Int        @id @default(autoincrement())
+  nome      String     @unique
+  sigla     String     @unique
+  grandeza  String     // massa, volume, comprimento, contagem
+  materiais Material[]
+}
+
+model Fornecedor {
+  id       Int              @id @default(autoincrement())
+  nome     String           @unique
+  entradas EntradaEstoque[]
+}
+
+model Material {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  categoriaId       Int
+  unidadeId         Int
+  quantidade        Float    @default(0)
+  quantidadeMinima  Float    @default(0)
+  custoMedio        Float    @default(0)
+  observacoes       String?
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  categoria   CategoriaMaterial   @relation(fields: [categoriaId], references: [id])
+  unidade     UnidadeMedida       @relation(fields: [unidadeId], references: [id])
+  filamento   FilamentoDetalhe?
+  entradas    EntradaEstoque[]
+  movimentacoes MovimentacaoEstoque[]
+  itensFicha  ItemFichaTecnica[]
+  ajustes     AjusteEstoque[]
+}
+
+model FilamentoDetalhe {
+  id                Int      @id @default(autoincrement())
+  materialId        Int      @unique
+  tipo              String?
+  marca             String?
+  cor               String?
+  pesoOriginalRolo  Float?
+  pesoDisponivel    Float?
+  observacoes       String?
+  material          Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+}
+
+model EntradaEstoque {
+  id             Int      @id @default(autoincrement())
+  materialId     Int
+  quantidade     Float
+  valorTotal     Float
+  custoUnitario  Float
+  custoMedioApos Float
+  dataCompra     DateTime @default(now())
+  fornecedorId   Int?
+  observacao     String?
+  criadoEm       DateTime @default(now())
+
+  material   Material    @relation(fields: [materialId], references: [id])
+  fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
+}
+
+model Produto {
+  id                  Int      @id @default(autoincrement())
+  nome                String
+  sku                 String   @unique
+  descricao           String?
+  ativo               Boolean  @default(true)
+  personalizado       Boolean  @default(false)  // recebe foto do cliente (impressão personalizada)
+  custoAtualMateriais Float    @default(0)
+  custosExtras        Float    @default(0)  // energia, mão de obra, embalagem não rastreada, etc.
+  margemLucroAlvo     Float    @default(0)  // margem de lucro alvo (%) para sugerir preço
+  ultimoCalculoCusto  DateTime?
+  criadoEm            DateTime @default(now())
+  atualizadoEm        DateTime @updatedAt
+
+  itensFicha   ItemFichaTecnica[]
+  itensEnvio   ItemRegistroEnvio[]
+  precos       PrecoProduto[]
+  itensPedidosPlataforma ItemPedidoPlataforma[]
+}
+
+model PlataformaVenda {
+  id                    Int      @id @default(autoincrement())
+  nome                  String   @unique
+  comissaoPercentual    Float    @default(0)  // % de comissão sobre o valor de venda
+  taxaFixaPorItem       Float    @default(0)  // R$ fixos por unidade vendida
+  percentualFreteGratis Float    @default(0)  // % adicional (programa de frete grátis)
+  ativo                 Boolean  @default(true)
+  criadoEm              DateTime @default(now())
+  atualizadoEm          DateTime @updatedAt
+
+  precos      PrecoProduto[]
+  envios      RegistroEnvio[]
+  saques      SaquePlataforma[]
+  integracao  IntegracaoPlataforma?
+  pedidos     PedidoPlataforma[]
+}
+
+model PrecoProduto {
+  id           Int   @id @default(autoincrement())
+  produtoId    Int
+  plataformaId Int
+  precoVenda   Float @default(0)
+
+  produto    Produto         @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  plataforma PlataformaVenda @relation(fields: [plataformaId], references: [id], onDelete: Cascade)
+  @@unique([produtoId, plataformaId])
+}
+
+model ItemFichaTecnica {
+  id                Int      @id @default(autoincrement())
+  produtoId         Int
+  materialId        Int
+  quantidade        Float
+  produto  Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id])
+  @@unique([produtoId, materialId])
+}
+
+model RegistroEnvio {
+  id                  Int      @id @default(autoincrement())
+  dataEnvio           DateTime @default(now())
+  observacao          String?
+  numeroPedido        String?  @unique  // nº do pedido na plataforma (ex.: order_sn da Shopee); evita baixa duplicada
+  custoTotalMateriais Float    @default(0)
+  plataformaId        Int?
+  faturamentoBruto    Float    @default(0)  // Σ preço de venda × quantidade
+  totalTaxas          Float    @default(0)  // comissão + taxa fixa da plataforma
+  custoTotalProdutos  Float    @default(0)  // custo final (materiais + extras) × quantidade
+  lucro               Float    @default(0)  // faturamento − taxas − custo dos produtos
+  criadoEm            DateTime @default(now())
+
+  plataforma             PlataformaVenda?       @relation(fields: [plataformaId], references: [id])
+  itens                  ItemRegistroEnvio[]
+  movimentacoes          MovimentacaoEstoque[]
+  itensPedidosPlataforma ItemPedidoPlataforma[]
+}
+
+model ItemRegistroEnvio {
+  id                 Int   @id @default(autoincrement())
+  envioId            Int
+  produtoId          Int
+  quantidade         Float
+  precoVendaUnitario Float @default(0)  // snapshot do preço de venda na plataforma
+  custoUnitario      Float @default(0)  // snapshot do custo final unitário (materiais + extras)
+  envio   RegistroEnvio @relation(fields: [envioId], references: [id], onDelete: Cascade)
+  produto Produto       @relation(fields: [produtoId], references: [id])
+}
+
+model MovimentacaoEstoque {
+  id                  Int      @id @default(autoincrement())
+  materialId          Int
+  tipo                String   // ENTRADA_COMPRA, SAIDA_ENVIO, AJUSTE_POSITIVO, AJUSTE_NEGATIVO, CORRECAO, ESTORNO, SAIDA_PRODUCAO_PLATAFORMA, ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA
+  quantidadeAnterior  Float
+  quantidadeMovimentada Float
+  quantidadeResultante Float
+  motivo              String?
+  observacao          String?
+  produtoId           Int?
+  envioId             Int?
+  itemPedidoPlataformaId Int?
+  criadoEm            DateTime @default(now())
+
+  material             Material              @relation(fields: [materialId], references: [id])
+  envio                RegistroEnvio?        @relation(fields: [envioId], references: [id])
+  itemPedidoPlataforma ItemPedidoPlataforma? @relation(fields: [itemPedidoPlataformaId], references: [id])
+}
+
+model AjusteEstoque {
+  id         Int      @id @default(autoincrement())
+  materialId Int
+  tipo       String   // ADICIONAR, REMOVER, DEFINIR
+  quantidade Float
+  motivo     String
+  observacao String?
+  criadoEm   DateTime @default(now())
+  material   Material @relation(fields: [materialId], references: [id])
+}
+
+// ---------- Módulo financeiro (fluxo de caixa) ----------
+
+model ContaFinanceira {
+  id           Int      @id @default(autoincrement())
+  nome         String   @unique
+  tipo         String   // CAIXA, BANCO, RESERVA_LUCRO, OUTRO
+  saldoAtual   Float    @default(0)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  movimentacoes MovimentacaoFinanceira[]
+  parcelas      ParcelaConta[]
+  saquesDestino SaquePlataforma[] @relation("saqueDestino")
+  saquesLucro   SaquePlataforma[] @relation("saqueLucro")
+}
+
+model MovimentacaoFinanceira {
+  id        Int      @id @default(autoincrement())
+  contaId   Int
+  tipo      String   // ENTRADA, SAIDA
+  origem    String   // SALDO_INICIAL, SAQUE_PLATAFORMA, DIRECIONAMENTO_LUCRO, PAGAMENTO_CONTA, APORTE, AJUSTE, TRANSFERENCIA
+  valor     Float
+  descricao String?
+  saldoApos Float
+  data      DateTime @default(now())
+  saqueId   Int?
+  parcelaId Int?
+  criadoEm  DateTime @default(now())
+
+  conta ContaFinanceira @relation(fields: [contaId], references: [id])
+}
+
+model SaquePlataforma {
+  id              Int      @id @default(autoincrement())
+  plataformaId    Int?
+  contaDestinoId  Int
+  contaLucroId    Int?
+  valorBruto      Float
+  percentualLucro Float    @default(0)
+  valorLucro      Float    @default(0)
+  valorLiquido    Float    @default(0)
+  data            DateTime @default(now())
+  observacao      String?
+  criadoEm        DateTime @default(now())
+
+  plataforma   PlataformaVenda? @relation(fields: [plataformaId], references: [id])
+  contaDestino ContaFinanceira  @relation("saqueDestino", fields: [contaDestinoId], references: [id])
+  contaLucro   ContaFinanceira? @relation("saqueLucro", fields: [contaLucroId], references: [id])
+}
+
+model ContaPagar {
+  id             Int      @id @default(autoincrement())
+  descricao      String
+  categoria      String?
+  valorTotal     Float
+  numeroParcelas Int      @default(1)
+  observacao     String?
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  parcelas ParcelaConta[]
+}
+
+model ParcelaConta {
+  id                Int       @id @default(autoincrement())
+  contaPagarId      Int
+  numero            Int
+  valor             Float
+  vencimento        DateTime
+  pago              Boolean   @default(false)
+  dataPagamento     DateTime?
+  contaFinanceiraId Int?
+  criadoEm          DateTime  @default(now())
+
+  contaPagar      ContaPagar       @relation(fields: [contaPagarId], references: [id], onDelete: Cascade)
+  contaFinanceira ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+}
+
+model ConfiguracaoFinanceira {
+  id                       Int      @id @default(1)
+  percentualLucroPadrao    Float    @default(0)
+  contaLucroPadraoId       Int?
+  contaOperacionalPadraoId Int?
+  atualizadoEm             DateTime @updatedAt
+}
+
+// ---------- Integração com plataformas (pedidos -> lista de produção) ----------
+// Genérico por plataforma (Shopee, TikTok Shop, ...): cada PlataformaVenda pode ter uma
+// IntegracaoPlataforma (credenciais de API) e pedidos sincronizados via PedidoPlataforma.
+
+model IntegracaoPlataforma {
+  plataformaId        Int       @id  // 1:1 com PlataformaVenda
+  tipo                String              // 'SHOPEE' | 'TIKTOK'
+  appId               String?             // Shopee: partner_id · TikTok: app_key
+  appSecret           String?             // Shopee: partner_key · TikTok: app_secret
+  lojaId              String?             // Shopee: shop_id · TikTok: shop_cipher
+  accessToken         String?
+  refreshToken        String?
+  accessTokenExpiraEm DateTime?
+  ultimaSincronizacao DateTime?
+  ativo               Boolean   @default(false)
+  atualizadoEm        DateTime  @updatedAt
+
+  plataforma PlataformaVenda @relation(fields: [plataformaId], references: [id])
+}
+
+model PedidoPlataforma {
+  id           Int       @id @default(autoincrement())
+  plataformaId Int
+  numeroPedido String    @unique  // order_sn (Shopee) / order_id (TikTok); trava duplicidade
+  status       String
+  prazoEnvio   DateTime?
+  dataPedido   DateTime?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  plataforma PlataformaVenda        @relation(fields: [plataformaId], references: [id])
+  itens      ItemPedidoPlataforma[]
+}
+
+model ItemPedidoPlataforma {
+  id             Int       @id @default(autoincrement())
+  pedidoId       Int
+  produtoId      Int?
+  envioId        Int?      // preenchido quando este item foi coberto por um envio manual (ver RegistroEnvio.numeroPedido)
+  skuPlataforma  String
+  nomePlataforma String
+  quantidade     Float
+  produzido      Boolean   @default(false)
+  produzidoEm    DateTime?
+  fotoImpressa   Boolean   @default(false)  // impressão da foto do cliente concluída (produtos personalizados)
+  fotoImpressaEm DateTime?
+  enviado        Boolean   @default(false)  // etapa final: produto já enviado ao cliente
+  enviadoEm      DateTime?
+  criadoEm       DateTime  @default(now())
+
+  pedido        PedidoPlataforma      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  produto       Produto?              @relation(fields: [produtoId], references: [id])
+  envio         RegistroEnvio?        @relation(fields: [envioId], references: [id])
+  movimentacoes MovimentacaoEstoque[]
+
+  @@unique([pedidoId, skuPlataforma])
+}

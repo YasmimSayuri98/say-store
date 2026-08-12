@@ -1,0 +1,13 @@
+{
+  "name": "estoque-3d",
+  "version": "1.0.0",
+  "description": "Sistema de controle de estoque para loja de impressão 3D",
+  "private": true,
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "setup:db": "cd server && npx prisma generate && npx prisma migrate deploy && npm run seed",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "test": "cd server && npm test"
+  }
+}

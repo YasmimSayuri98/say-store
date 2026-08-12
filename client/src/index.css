@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-base-100 text-grafite-900 font-sans antialiased;
+}
+
+h1, h2, h3, .display {
+  @apply font-display tracking-tight;
+}
+
+/* Camada "components": permite que utilitárias (ex.: w-28) sobrescrevam estas classes
+   quando combinadas no mesmo elemento (ex.: className="input w-28"), independente da
+   ordem em que aparecem neste arquivo. */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 whitespace-nowrap;
+  }
+  .btn:focus-visible {
+    @apply outline-none ring-2 ring-marca-400 ring-offset-2 ring-offset-base-100;
+  }
+  .btn-primary {
+    @apply bg-marca-500 text-white shadow-suave hover:bg-marca-600 active:bg-marca-700;
+  }
+  .btn-secondary {
+    @apply bg-white text-grafite-800 border border-base-300 hover:border-marca-300 hover:text-marca-600;
+  }
+  .btn-danger {
+    @apply bg-white text-red-600 border border-red-200 hover:bg-red-600 hover:text-white hover:border-red-600;
+  }
+  .btn-ghost {
+    @apply text-grafite-800 hover:bg-base-200;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-cartao border border-base-200 p-5;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 bg-white border border-base-300 rounded-lg text-sm text-grafite-900 transition;
+  }
+  .input:focus {
+    @apply outline-none border-marca-400 ring-2 ring-marca-100;
+  }
+  .input:read-only {
+    @apply bg-base-100 text-grafite-800/70;
+  }
+  .label {
+    @apply block text-xs font-semibold text-grafite-800/70 uppercase tracking-wide mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-full;
+  }
+  .badge-normal { @apply bg-emerald-50 text-emerald-700; }
+  .badge-normal::before { @apply bg-emerald-500; }
+  .badge-baixo { @apply bg-marca-50 text-marca-700; }
+  .badge-baixo::before { @apply bg-marca-500; }
+  .badge-sem { @apply bg-red-50 text-red-700; }
+  .badge-sem::before { @apply bg-red-500; }
+}
+
+/* Barra de rolagem discreta do menu lateral (grafite escuro) */
+.sidebar-scroll {
+  scrollbar-width: thin;                 /* Firefox */
+  scrollbar-color: rgba(232,89,12,0.5) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.14);
+  border-radius: 9999px;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(232,89,12,0.6); /* laranja da marca no hover */
+}
+
+.th {
+  @apply text-left text-[11px] font-semibold text-grafite-800/50 uppercase tracking-wider px-3 py-2.5;
+}
+.td {
+  @apply px-3 py-3 text-sm border-t border-base-200;
+}
+table tbody tr {
+  @apply transition-colors;
+}
+table tbody tr:hover {
+  @apply bg-base-50;
+}

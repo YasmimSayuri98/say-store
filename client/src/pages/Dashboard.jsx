@@ -1,0 +1,392 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../api';
+import { moeda, numero, dataHora, data } from '../format';
+import { useToast } from '../components/Toast';
+import Modal from '../components/Modal';
+
+function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false }) {
+  return (
+    <div className={`card !p-4 relative overflow-hidden ${destaque ? 'ring-1 ring-marca-200' : ''}`}>
+      {destaque && <div className="absolute left-0 top-0 bottom-0 w-1 bg-marca-500" />}
+      <div className="text-xs font-medium text-grafite-800/60 uppercase tracking-wide">{titulo}</div>
+      <div className={`text-2xl font-display font-bold mt-1.5 ${cor}`}>{valor}</div>
+    </div>
+  );
+}
+
+function Atalho({ to, label, icone }) {
+  return (
+    <Link to={to} className="btn btn-secondary group">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-marca-500 group-hover:text-marca-600">
+        <path d={icone} />
+      </svg>
+      {label}
+    </Link>
+  );
+}
+
+function rotuloPrazo(prazoEnvio) {
+  if (!prazoEnvio) return 'Sem prazo definido';
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const d = new Date(prazoEnvio); d.setHours(0, 0, 0, 0);
+  const diffDias = Math.round((d - hoje) / 86400000);
+  if (diffDias < 0) return 'Atrasado';
+  if (diffDias === 0) return 'Hoje';
+  if (diffDias === 1) return 'Amanhã';
+  return data(prazoEnvio);
+}
+
+function agruparPorPrazo(itens) {
+  const grupos = new Map();
+  for (const it of itens) {
+    const rotulo = rotuloPrazo(it.prazoEnvio);
+    if (!grupos.has(rotulo)) grupos.set(rotulo, []);
+    grupos.get(rotulo).push(it);
+  }
+  return grupos;
+}
+
+function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido }) {
+  const grupos = agruparPorPrazo(itens);
+  return (
+    <div className="card lg:col-span-2">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-bold text-grafite-900">Produção necessária</h2>
+        <div className="flex items-center gap-3">
+          <button className="text-xs font-semibold text-marca-600 hover:text-marca-700" onClick={onNovoPedido}>+ Pedido manual</button>
+          <Link to="/plataformas" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Configurar →</Link>
+        </div>
+      </div>
+      {itens.length === 0 ? (
+        <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhuma produção pendente.</p>
+      ) : (
+        <div className="space-y-4">
+          {[...grupos.entries()].map(([rotulo, lista]) => (
+            <div key={rotulo}>
+              <div className={`text-xs font-semibold uppercase tracking-wide mb-1.5 ${rotulo === 'Atrasado' ? 'text-red-600' : 'text-grafite-800/50'}`}>{rotulo}</div>
+              <table className="w-full">
+                <tbody>
+                  {lista.map((it) => (
+                    <tr key={it.id}>
+                      <td className="td">
+                        <div className="flex flex-col gap-1">
+                          <span className={it.semVinculo ? 'text-grafite-800/40 italic' : 'font-medium'}>
+                            {it.semVinculo ? it.nomePlataforma : it.produtoNome} × {numero(it.quantidade)}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <label className={`flex items-center gap-1.5 text-xs ${it.produzido || it.semVinculo || !it.estoqueSuficiente ? 'text-grafite-800/40' : 'cursor-pointer text-grafite-800/70'}`}>
+                              <input
+                                type="checkbox"
+                                checked={it.produzido}
+                                disabled={it.produzido || it.semVinculo || !it.estoqueSuficiente}
+                                onChange={() => onProduzir(it)}
+                              />
+                              Produto feito
+                            </label>
+                            {it.personalizado && (
+                              <label className={`flex items-center gap-1.5 text-xs ${it.fotoImpressa ? 'text-grafite-800/40' : 'cursor-pointer text-grafite-800/70'}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={it.fotoImpressa}
+                                  disabled={it.fotoImpressa}
+                                  onChange={() => onMarcarFoto(it)}
+                                />
+                                Foto impressa
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="td text-xs whitespace-nowrap">
+                        <span className="badge badge-baixo">{it.plataformaNome}</span>
+                      </td>
+                      <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
+                      <td className="td text-right whitespace-nowrap">
+                        {it.semVinculo ? (
+                          <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
+                        ) : !it.estoqueSuficiente ? (
+                          <span className="badge badge-sem">Faltam materiais</span>
+                        ) : (
+                          <span className="badge badge-normal">Estoque OK</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SecaoAguardandoEnvio({ itens, onEnviar }) {
+  const grupos = agruparPorPrazo(itens);
+  return (
+    <div className="card lg:col-span-2">
+      <h2 className="font-display font-bold text-grafite-900 mb-4">Aguardando envio</h2>
+      {itens.length === 0 ? (
+        <p className="text-sm text-grafite-800/40 py-4 text-center">Nada aguardando envio.</p>
+      ) : (
+        <div className="space-y-4">
+          {[...grupos.entries()].map(([rotulo, lista]) => (
+            <div key={rotulo}>
+              <div className={`text-xs font-semibold uppercase tracking-wide mb-1.5 ${rotulo === 'Atrasado' ? 'text-red-600' : 'text-grafite-800/50'}`}>{rotulo}</div>
+              <table className="w-full">
+                <tbody>
+                  {lista.map((it) => (
+                    <tr key={it.id}>
+                      <td className="td">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={false} onChange={() => onEnviar(it)} />
+                          <span className="font-medium">{it.produtoNome} × {numero(it.quantidade)}</span>
+                        </label>
+                      </td>
+                      <td className="td text-xs whitespace-nowrap"><span className="badge badge-baixo">{it.plataformaNome}</span></td>
+                      <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const pedidoManualVazio = { plataformaId: '', numeroPedido: '', prazoEnvio: '' };
+
+function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
+  const [form, setForm] = useState(pedidoManualVazio);
+  const [itens, setItens] = useState([{ produtoId: '', quantidade: '' }]);
+  const [salvando, setSalvando] = useState(false);
+  const toast = useToast();
+
+  const plataformaSelecionada = plataformas.find((p) => String(p.id) === String(form.plataformaId));
+  const ehTikTok = plataformaSelecionada && plataformaSelecionada.nome.toLowerCase().includes('tiktok');
+
+  function addItem() { setItens([...itens, { produtoId: '', quantidade: '' }]); }
+  function removeItem(i) { setItens(itens.filter((_, idx) => idx !== i)); }
+  function setItem(i, campo, valor) { setItens(itens.map((it, idx) => idx === i ? { ...it, [campo]: valor } : it)); }
+
+  async function salvar() {
+    const validos = itens.filter((it) => it.produtoId && Number(it.quantidade) > 0)
+      .map((it) => ({ produtoId: Number(it.produtoId), quantidade: Number(it.quantidade) }));
+    if (!form.plataformaId) return toast.erro('Selecione a plataforma.');
+    if (!form.numeroPedido.trim()) return toast.erro('Informe o número do pedido.');
+    if (validos.length === 0) return toast.erro('Adicione ao menos um produto.');
+
+    setSalvando(true);
+    try {
+      await api.post('/producao/manual', {
+        plataformaId: Number(form.plataformaId),
+        numeroPedido: form.numeroPedido.trim(),
+        prazoEnvio: form.prazoEnvio || undefined,
+        itens: validos,
+      });
+      toast.sucesso('Pedido cadastrado na lista de produção.');
+      onSalvo();
+    } catch (e) { toast.erro(e.message); }
+    setSalvando(false);
+  }
+
+  return (
+    <Modal titulo="Cadastrar pedido manual" onClose={onClose} largura="max-w-xl">
+      <div className="space-y-3">
+        <div>
+          <label className="label">Plataforma *</label>
+          <select className="input" value={form.plataformaId} onChange={(e) => setForm({ ...form, plataformaId: e.target.value })}>
+            <option value="">Selecione</option>
+            {plataformas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Número do pedido *</label>
+          <input className="input" value={form.numeroPedido} onChange={(e) => setForm({ ...form, numeroPedido: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">Prazo de envio</label>
+          <input type="date" className="input" value={form.prazoEnvio} onChange={(e) => setForm({ ...form, prazoEnvio: e.target.value })} />
+        </div>
+        {ehTikTok && (
+          <p className="text-xs text-marca-700 bg-marca-50 border border-marca-100 rounded-lg px-3 py-2">
+            ⚠️ Lembrete: a TikTok costuma exigir envio até 1 dia antes da entrega, mas em períodos de muito
+            pedido pode liberar +1 dia de folga — confira no app da TikTok Shop antes de definir esse prazo.
+          </p>
+        )}
+
+        <div>
+          <label className="label">Produtos do pedido</label>
+          <div className="space-y-2">
+            {itens.map((it, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <select className="input flex-1" value={it.produtoId} onChange={(e) => setItem(i, 'produtoId', e.target.value)}>
+                  <option value="">Selecione o produto</option>
+                  {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+                <input type="number" className="input w-24" placeholder="Qtd" value={it.quantidade} onChange={(e) => setItem(i, 'quantidade', e.target.value)} />
+                <button className="btn btn-danger btn-sm" onClick={() => removeItem(i)}>×</button>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-secondary btn-sm mt-2" onClick={addItem}>+ Adicionar produto</button>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Cadastrar'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+export default function Dashboard() {
+  const [d, setD] = useState(null);
+  const [producao, setProducao] = useState([]);
+  const [plataformas, setPlataformas] = useState([]);
+  const [produtos, setProdutos] = useState([]);
+  const [modalPedidoManual, setModalPedidoManual] = useState(false);
+  const toast = useToast();
+
+  function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
+
+  useEffect(() => { api.get('/dashboard').then(setD).catch(() => {}); }, []);
+  useEffect(() => { recarregarProducao(); }, []);
+  useEffect(() => {
+    api.get('/plataformas?ativo=true').then(setPlataformas).catch(() => {});
+    api.get('/produtos?ativo=true').then(setProdutos).catch(() => {});
+  }, []);
+
+  async function produzir(item) {
+    try {
+      await api.post(`/producao/${item.id}/produzir`, {});
+      toast.sucesso(`${item.produtoNome || item.nomePlataforma} marcado como produzido.`);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function marcarFoto(item) {
+    try {
+      await api.post(`/producao/${item.id}/foto-impressa`, {});
+      toast.sucesso('Foto marcada como impressa.');
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function enviar(item) {
+    try {
+      await api.post(`/producao/${item.id}/enviar`, {});
+      toast.sucesso(`${item.produtoNome} marcado como enviado.`);
+      setProducao((lista) => lista.filter((it) => it.id !== item.id));
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  if (!d) return <p className="text-grafite-800/60">Carregando...</p>;
+
+  const itensAProduzir = producao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
+  const itensAguardandoEnvio = producao.filter((it) => it.fase === 'AGUARDANDO_ENVIO');
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-display font-extrabold text-grafite-900">Visão geral</h1>
+        <p className="text-grafite-800/60 mt-1">Visão geral do estoque e da produção</p>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Estatistica titulo="Disponível banco Cora" valor={moeda(d.saldoDisponivel)} cor="text-green-700" destaque />
+        <Estatistica titulo="Lucro acumulado" valor={moeda(d.lucroAcumulado)} cor="text-marca-600" />
+        <Estatistica titulo="Materiais cadastrados" valor={d.materiaisCadastrados} />
+        <Estatistica titulo="Estoque baixo" valor={d.materiaisBaixo} cor={d.materiaisBaixo > 0 ? 'text-marca-600' : 'text-grafite-900'} />
+        <Estatistica titulo="Sem estoque" valor={d.materiaisSemEstoque} cor={d.materiaisSemEstoque > 0 ? 'text-red-600' : 'text-grafite-900'} />
+        <Estatistica titulo="Produtos cadastrados" valor={d.produtosCadastrados} />
+        <Estatistica titulo="Custo materiais no mês" valor={moeda(d.custoMateriaisMes)} />
+        <Estatistica titulo="Produtos enviados no mês" valor={numero(d.produtosEnviadosMes)} />
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-8">
+        <Atalho to="/entradas" label="Registrar entrada" icone="M12 5v14M5 12l7 7 7-7" />
+        <Atalho to="/envios" label="Registrar envio" icone="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+        <Atalho to="/produtos" label="Cadastrar produto" icone="M12 5v14M5 12h14" />
+        <Atalho to="/materiais" label="Cadastrar material" icone="M12 5v14M5 12h14" />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-5">
+        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onNovoPedido={() => setModalPedidoManual(true)} />
+        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={enviar} />
+
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display font-bold text-grafite-900">Materiais mais urgentes</h2>
+            <Link to="/lista-compras" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Ver lista →</Link>
+          </div>
+          {d.urgentes.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhum material urgente.</p> : (
+            <table className="w-full">
+              <tbody>
+                {d.urgentes.map((m) => (
+                  <tr key={m.id}>
+                    <td className="td font-medium">{m.nome}</td>
+                    <td className="td text-right tabular-nums">{numero(m.quantidade)} {m.unidade}</td>
+                    <td className="td text-right"><span className={`badge ${m.situacao === 'SEM_ESTOQUE' ? 'badge-sem' : 'badge-baixo'}`}>{m.situacao === 'SEM_ESTOQUE' ? 'Sem estoque' : 'Baixo'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="card">
+          <h2 className="font-display font-bold text-grafite-900 mb-4">Últimas movimentações</h2>
+          {d.ultimasMovimentacoes.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhuma movimentação.</p> : (
+            <table className="w-full">
+              <tbody>
+                {d.ultimasMovimentacoes.map((m) => (
+                  <tr key={m.id}>
+                    <td className="td font-medium">{m.material.nome}</td>
+                    <td className="td text-xs text-grafite-800/50">{m.tipo}</td>
+                    <td className="td text-right tabular-nums">{numero(m.quantidadeMovimentada)} {m.material.unidade.sigla}</td>
+                    <td className="td text-right text-xs text-grafite-800/40">{dataHora(m.criadoEm)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="card lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display font-bold text-grafite-900">Últimos envios</h2>
+            <Link to="/historico-envios" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Ver histórico →</Link>
+          </div>
+          {d.ultimosEnvios.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhum envio registrado.</p> : (
+            <table className="w-full">
+              <tbody>
+                {d.ultimosEnvios.map((e) => (
+                  <tr key={e.id}>
+                    <td className="td tabular-nums text-grafite-800/70">{data(e.dataEnvio)}</td>
+                    <td className="td">{e.itens.map((i) => `${numero(i.quantidade)}x ${i.produto.nome}`).join(', ')}</td>
+                    <td className="td text-right font-medium tabular-nums">{moeda(e.custoTotalMateriais)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {modalPedidoManual && (
+        <ModalPedidoManual
+          plataformas={plataformas}
+          produtos={produtos}
+          onClose={() => setModalPedidoManual(false)}
+          onSalvo={() => { setModalPedidoManual(false); recarregarProducao(); }}
+        />
+      )}
+    </div>
+  );
+}
