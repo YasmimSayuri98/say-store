@@ -38,6 +38,21 @@ function rotuloPrazo(prazoEnvio) {
   return dataDia(prazoEnvio);
 }
 
+function ehAtrasado(prazoEnvio) {
+  return !!prazoEnvio && rotuloPrazo(prazoEnvio) === 'Atrasado';
+}
+
+// Mostra a data do prazo de um pedido; em vermelho e com aviso quando está atrasado.
+function PrazoPedido({ prazoEnvio }) {
+  if (!prazoEnvio) return <span className="text-xs text-grafite-800/40">Sem prazo</span>;
+  const atrasado = ehAtrasado(prazoEnvio);
+  return (
+    <span className={`text-xs whitespace-nowrap ${atrasado ? 'text-red-600 font-semibold' : 'text-grafite-800/50'}`}>
+      {atrasado ? '⚠️ Atrasado · ' : 'Prazo '}{dataDia(prazoEnvio)}
+    </span>
+  );
+}
+
 function agruparPorPrazo(itens) {
   const grupos = new Map();
   for (const it of itens) {
@@ -118,7 +133,10 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEdita
                       <td className="td text-xs whitespace-nowrap">
                         <span className="badge badge-baixo">{it.plataformaNome}</span>
                       </td>
-                      <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
+                      <td className="td text-xs whitespace-nowrap">
+                        <div className="text-grafite-800/50">{it.numeroPedido}</div>
+                        <PrazoPedido prazoEnvio={it.prazoEnvio} />
+                      </td>
                       <td className="td text-right whitespace-nowrap">
                         {it.semVinculo ? (
                           <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
@@ -167,7 +185,10 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
                         )}
                       </td>
                       <td className="td text-xs whitespace-nowrap"><span className="badge badge-baixo">{it.plataformaNome}</span></td>
-                      <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
+                      <td className="td text-xs whitespace-nowrap">
+                        <div className="text-grafite-800/50">{it.numeroPedido}</div>
+                        <PrazoPedido prazoEnvio={it.prazoEnvio} />
+                      </td>
                       <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
                     </tr>
                   ))}
