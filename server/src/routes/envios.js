@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
+const { parseDataDia } = require('../utils/data');
 const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
 const router = express.Router();
 
@@ -198,7 +199,7 @@ router.post('/', async (req, res, next) => {
 
       const envio = await tx.registroEnvio.create({
         data: {
-          dataEnvio: req.body.dataEnvio ? new Date(req.body.dataEnvio) : new Date(),
+          dataEnvio: parseDataDia(req.body.dataEnvio) || new Date(),
           observacao: req.body.observacao || null,
           numeroPedido,
           custoTotalMateriais: resumo.custoTotal,

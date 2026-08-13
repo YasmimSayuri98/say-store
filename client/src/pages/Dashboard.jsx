@@ -26,10 +26,15 @@ function Atalho({ to, label, icone }) {
   );
 }
 
+// Dia (YYYY-MM-DD) no fuso de Brasília, para comparar prazos sem escorregar de dia por fuso.
+function diaBrasilia(v) {
+  return new Date(v).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
 function rotuloPrazo(prazoEnvio) {
   if (!prazoEnvio) return 'Sem prazo definido';
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const d = new Date(prazoEnvio); d.setHours(0, 0, 0, 0);
+  const hoje = new Date(diaBrasilia(new Date()) + 'T00:00:00');
+  const d = new Date(diaBrasilia(prazoEnvio) + 'T00:00:00');
   const diffDias = Math.round((d - hoje) / 86400000);
   if (diffDias < 0) return 'Atrasado';
   if (diffDias === 0) return 'Hoje';
@@ -87,6 +92,9 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEdita
                           <span className={it.semVinculo ? 'text-grafite-800/40 italic' : 'font-medium'}>
                             {it.semVinculo ? it.nomePlataforma : it.produtoNome} × {numero(it.quantidade)}
                           </span>
+                          {it.observacao && (
+                            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>
+                          )}
                           <div className="flex items-center gap-3">
                             <label className={`flex items-center gap-1.5 text-xs ${it.produzido || it.semVinculo || !it.estoqueSuficiente ? 'text-grafite-800/40' : 'cursor-pointer text-grafite-800/70'}`}>
                               <input
@@ -158,6 +166,9 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
                           <input type="checkbox" checked={false} onChange={() => onEnviar(it)} />
                           <span className="font-medium">{it.produtoNome} × {numero(it.quantidade)}</span>
                         </label>
+                        {it.observacao && (
+                          <span className="mt-1 block text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>
+                        )}
                       </td>
                       <td className="td text-xs whitespace-nowrap"><span className="badge badge-baixo">{it.plataformaNome}</span></td>
                       <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
@@ -174,7 +185,7 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
   );
 }
 
-const pedidoManualVazio = { plataformaId: '', numeroPedido: '', prazoEnvio: '' };
+const pedidoManualVazio = { plataformaId: '', numeroPedido: '', prazoEnvio: '', observacao: '' };
 
 function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
   const [form, setForm] = useState(pedidoManualVazio);
@@ -202,6 +213,7 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
         plataformaId: Number(form.plataformaId),
         numeroPedido: form.numeroPedido.trim(),
         prazoEnvio: form.prazoEnvio || undefined,
+        observacao: form.observacao.trim() || undefined,
         itens: validos,
       });
       toast.sucesso('Pedido cadastrado na lista de produção.');
@@ -251,6 +263,10 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
           </div>
           <button className="btn btn-secondary btn-sm mt-2" onClick={addItem}>+ Adicionar produto</button>
         </div>
+        <div>
+          <label className="label">Observação</label>
+          <textarea className="input" rows={2} value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} placeholder="Ex.: cor personalizada, embrulho para presente, atenção ao prazo..." />
+        </div>
       </div>
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -266,6 +282,7 @@ function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
   const [prazoEnvio, setPrazoEnvio] = useState(item.prazoEnvio ? String(item.prazoEnvio).slice(0, 10) : '');
   const [produtoId, setProdutoId] = useState(item.produtoId ? String(item.produtoId) : '');
   const [quantidade, setQuantidade] = useState(String(item.quantidade));
+  const [observacao, setObservacao] = useState(item.observacao || '');
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
   const bloqueadoItem = item.produzido; // produto/quantidade não mudam depois de produzido
@@ -280,6 +297,7 @@ function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
         numeroPedido: numeroPedido.trim(),
         plataformaId: Number(plataformaId),
         prazoEnvio: prazoEnvio || null,
+        observacao,
         produtoId: bloqueadoItem ? undefined : Number(produtoId),
         quantidade: bloqueadoItem ? undefined : Number(quantidade),
       });
@@ -319,6 +337,10 @@ function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
             <label className="label">Quantidade</label>
             <input type="number" className="input" value={quantidade} disabled={bloqueadoItem} onChange={(e) => setQuantidade(e.target.value)} />
           </div>
+        </div>
+        <div>
+          <label className="label">Observação</label>
+          <textarea className="input" rows={2} value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Ex.: cor personalizada, embrulho para presente, atenção ao prazo..." />
         </div>
         {bloqueadoItem && (
           <p className="text-xs text-grafite-800/50">Este item já foi marcado como produzido — o produto e a quantidade não podem mais ser alterados aqui (o estoque já foi descontado). Para trocar o produto ou a quantidade, exclua e cadastre de novo.</p>

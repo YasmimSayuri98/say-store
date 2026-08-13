@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { moeda, data } from '../format';
+import { moeda, data, hojeISO } from '../format';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 
@@ -69,7 +69,7 @@ export default function ContasPagar() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-3xl font-display font-extrabold text-grafite-900">Contas a pagar</h1>
-        <button className="btn btn-primary" onClick={() => { setNova((n) => ({ ...n, primeiroVencimento: new Date().toISOString().slice(0, 10) })); setNovaAberto(true); }}>+ Nova conta</button>
+        <button className="btn btn-primary" onClick={() => { setNova((n) => ({ ...n, primeiroVencimento: hojeISO() })); setNovaAberto(true); }}>+ Nova conta</button>
       </div>
 
       <div className="flex gap-2 mb-4">

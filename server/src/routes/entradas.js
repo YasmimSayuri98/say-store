@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { round4, custoMedioPonderado } = require('../utils/money');
+const { parseDataDia } = require('../utils/data');
 const { recalcularProdutosPorMaterial } = require('../services/custoService');
 const router = express.Router();
 
@@ -41,7 +42,7 @@ router.post('/', async (req, res, next) => {
         data: {
           materialId, quantidade, valorTotal, custoUnitario,
           custoMedioApos: novoCustoMedio,
-          dataCompra: b.dataCompra ? new Date(b.dataCompra) : new Date(),
+          dataCompra: parseDataDia(b.dataCompra) || new Date(),
           fornecedorId: b.fornecedorId ? Number(b.fornecedorId) : null,
           observacao: b.observacao || null,
         },

@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { round2 } = require('../utils/money');
+const { parseDataDia } = require('../utils/data');
 const { aplicarMovimentacao, getConfig } = require('../services/financeiroService');
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.post('/', async (req, res, next) => {
           plataformaId: b.plataformaId ? Number(b.plataformaId) : null,
           contaDestinoId, contaLucroId: contaLucroId || null,
           valorBruto, percentualLucro, valorLucro, valorLiquido,
-          data: b.data ? new Date(b.data) : new Date(),
+          data: parseDataDia(b.data) || new Date(),
           observacao: b.observacao || null,
         },
       });

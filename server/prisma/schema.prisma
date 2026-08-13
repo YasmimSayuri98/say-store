@@ -311,6 +311,7 @@ model PedidoPlataforma {
   status       String
   prazoEnvio   DateTime?
   dataPedido   DateTime?
+  observacao   String?   // anotações do pedido (ex.: cadastro manual), exibidas na lista de produção
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 

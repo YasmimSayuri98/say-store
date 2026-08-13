@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { round2 } = require('../utils/money');
+const { parseDataDia } = require('../utils/data');
 const { aplicarMovimentacao } = require('../services/financeiroService');
 const router = express.Router();
 
@@ -11,7 +12,7 @@ function gerarParcelas(valorTotal, numero, primeiroVencimento) {
   const n = Math.max(1, Number(numero) || 1);
   const base = round2(total / n);
   const parcelas = [];
-  const dataBase = new Date(primeiroVencimento);
+  const dataBase = parseDataDia(primeiroVencimento);
   let acumulado = 0;
   for (let i = 0; i < n; i++) {
     const venc = new Date(dataBase);
@@ -65,7 +66,7 @@ router.post('/', async (req, res, next) => {
       // Parcelas informadas manualmente
       parcelas = b.parcelas.map((p, i) => {
         if (!p.vencimento) throw Object.assign(new Error(`Vencimento obrigatório na parcela ${i + 1}.`), { status: 400 });
-        return { numero: i + 1, valor: round2(p.valor || 0), vencimento: new Date(p.vencimento) };
+        return { numero: i + 1, valor: round2(p.valor || 0), vencimento: parseDataDia(p.vencimento) };
       });
       const soma = round2(parcelas.reduce((s, p) => s + p.valor, 0));
       if (soma !== valorTotal) return res.status(400).json({ erro: `A soma das parcelas (${soma}) difere do valor total (${valorTotal}).` });
@@ -112,7 +113,7 @@ router.post('/parcelas/:id/pagar', async (req, res, next) => {
       });
       await tx.parcelaConta.update({
         where: { id },
-        data: { pago: true, dataPagamento: req.body.dataPagamento ? new Date(req.body.dataPagamento) : new Date(), contaFinanceiraId },
+        data: { pago: true, dataPagamento: parseDataDia(req.body.dataPagamento) || new Date(), contaFinanceiraId },
       });
     });
     const atualizada = await prisma.parcelaConta.findUnique({ where: { id }, include: { contaFinanceira: true } });

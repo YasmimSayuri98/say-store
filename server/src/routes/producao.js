@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
+const { parseDataDia } = require('../utils/data');
 const router = express.Router();
 
 // Calcula, a partir da ficha técnica do produto, se há estoque suficiente para a quantidade pedida.
@@ -54,6 +55,7 @@ router.get('/', async (req, res, next) => {
         produtoNome: it.produto ? it.produto.nome : null,
         skuPlataforma: it.skuPlataforma,
         nomePlataforma: it.nomePlataforma,
+        observacao: it.pedido.observacao,
         quantidade: it.quantidade,
         semVinculo: !it.produtoId,
         estoqueSuficiente: check.suficiente,
@@ -75,7 +77,7 @@ router.get('/', async (req, res, next) => {
 // pedidos sincronizados automaticamente.
 router.post('/manual', async (req, res, next) => {
   try {
-    const { plataformaId, numeroPedido, prazoEnvio, itens } = req.body;
+    const { plataformaId, numeroPedido, prazoEnvio, itens, observacao } = req.body;
     if (!plataformaId) return res.status(400).json({ erro: 'Selecione a plataforma.' });
     const numero = numeroPedido ? String(numeroPedido).trim() : '';
     if (!numero) return res.status(400).json({ erro: 'Informe o número do pedido.' });
@@ -102,7 +104,8 @@ router.post('/manual', async (req, res, next) => {
         plataformaId: Number(plataformaId),
         numeroPedido: numero,
         status: 'MANUAL',
-        prazoEnvio: prazoEnvio ? new Date(prazoEnvio) : null,
+        prazoEnvio: parseDataDia(prazoEnvio) || null,
+        observacao: observacao && String(observacao).trim() ? String(observacao).trim() : null,
         dataPedido: new Date(),
         itens: {
           create: itens.map((it) => {
@@ -304,7 +307,7 @@ router.put('/:itemId/vincular', async (req, res, next) => {
 router.put('/:itemId', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
-    const { numeroPedido, prazoEnvio, produtoId, quantidade, plataformaId } = req.body;
+    const { numeroPedido, prazoEnvio, produtoId, quantidade, plataformaId, observacao } = req.body;
 
     const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { pedido: true } });
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
@@ -348,7 +351,12 @@ router.put('/:itemId', async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       await tx.pedidoPlataforma.update({
         where: { id: item.pedidoId },
-        data: { numeroPedido: novoNumero, prazoEnvio: prazoEnvio ? new Date(prazoEnvio) : null, plataformaId: novaPlataformaId },
+        data: {
+          numeroPedido: novoNumero,
+          prazoEnvio: parseDataDia(prazoEnvio) || null,
+          plataformaId: novaPlataformaId,
+          ...(observacao !== undefined ? { observacao: observacao && String(observacao).trim() ? String(observacao).trim() : null } : {}),
+        },
       });
       if (Object.keys(dataItem).length) {
         await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: dataItem });
