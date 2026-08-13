@@ -32,6 +32,77 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+function situacaoMaterial(m) {
+  if (m.quantidade <= 0) return 'SEM_ESTOQUE';
+  if (m.quantidade <= m.quantidadeMinima) return 'BAIXO';
+  return 'NORMAL';
+}
+
+// Relatório de envio: gastos com embalagem no período, consumo por material, estoque atual
+// dos materiais de embalagem e o que precisa comprar. `de`/`ate` são datas (YYYY-MM-DD).
+router.get('/relatorio', async (req, res, next) => {
+  try {
+    const { de, ate } = req.query;
+    const periodo = {};
+    if (de) periodo.gte = new Date(de + 'T00:00:00.000Z');
+    if (ate) periodo.lte = new Date(ate + 'T23:59:59.999Z');
+    const temPeriodo = Object.keys(periodo).length > 0;
+
+    // Usos de embalagem no período (custo é snapshot gravado no envio).
+    const usos = await prisma.usoEmbalagem.findMany({
+      where: temPeriodo ? { data: periodo } : {},
+      include: { embalagem: true },
+    });
+    const totalGasto = round4(usos.reduce((s, u) => s + u.custoTotal, 0));
+    const totalPacotes = round4(usos.reduce((s, u) => s + u.quantidade, 0));
+
+    const porEmbMap = new Map();
+    for (const u of usos) {
+      const atual = porEmbMap.get(u.embalagemId) || { embalagemId: u.embalagemId, nome: u.embalagem.nome, pacotes: 0, custo: 0 };
+      atual.pacotes = round4(atual.pacotes + u.quantidade);
+      atual.custo = round4(atual.custo + u.custoTotal);
+      porEmbMap.set(u.embalagemId, atual);
+    }
+    const porEmbalagem = [...porEmbMap.values()].sort((a, b) => b.custo - a.custo);
+
+    // Consumo por material (quantidade), a partir das movimentações SAIDA_EMBALAGEM no período.
+    const movs = await prisma.movimentacaoEstoque.findMany({
+      where: { tipo: 'SAIDA_EMBALAGEM', ...(temPeriodo ? { criadoEm: periodo } : {}) },
+      include: { material: { include: { unidade: true } } },
+    });
+    const porMatMap = new Map();
+    for (const mv of movs) {
+      const atual = porMatMap.get(mv.materialId) || { materialId: mv.materialId, nome: mv.material.nome, unidade: mv.material.unidade.sigla, quantidade: 0, custoEstimado: 0 };
+      atual.quantidade = round4(atual.quantidade + mv.quantidadeMovimentada);
+      atual.custoEstimado = round4(atual.quantidade * mv.material.custoMedio);
+      porMatMap.set(mv.materialId, atual);
+    }
+    const porMaterial = [...porMatMap.values()].sort((a, b) => b.custoEstimado - a.custoEstimado);
+
+    // Estoque atual dos materiais que participam de alguma embalagem.
+    const itensEmb = await prisma.itemEmbalagem.findMany({ include: { material: { include: { unidade: true } } } });
+    const estoqueMap = new Map();
+    for (const it of itensEmb) {
+      if (estoqueMap.has(it.materialId)) continue;
+      const m = it.material;
+      estoqueMap.set(it.materialId, {
+        materialId: m.id, nome: m.nome, unidade: m.unidade.sigla,
+        quantidade: m.quantidade, quantidadeMinima: m.quantidadeMinima,
+        custoMedio: m.custoMedio, valorEmEstoque: round4(m.quantidade * m.custoMedio),
+        situacao: situacaoMaterial(m),
+      });
+    }
+    const estoque = [...estoqueMap.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+    const comprar = estoque.filter((m) => m.situacao !== 'NORMAL');
+
+    res.json({
+      periodo: { de: de || null, ate: ate || null },
+      totalGasto, totalPacotes, quantidadeEnvios: new Set(usos.filter((u) => u.envioId).map((u) => u.envioId)).size,
+      porEmbalagem, porMaterial, estoque, comprar,
+    });
+  } catch (e) { next(e); }
+});
+
 // Valida e normaliza os itens (materiais + quantidades) de uma embalagem.
 async function validarItens(itens) {
   if (!Array.isArray(itens) || itens.length === 0) throw Object.assign(new Error('Adicione ao menos um material à embalagem.'), { status: 400 });
