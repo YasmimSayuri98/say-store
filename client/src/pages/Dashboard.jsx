@@ -47,7 +47,20 @@ function agruparPorPrazo(itens) {
   return grupos;
 }
 
-function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido }) {
+function AcoesLinha({ onEditar, onExcluir }) {
+  return (
+    <div className="flex items-center gap-1 justify-end">
+      <button title="Editar" onClick={onEditar} className="p-1 rounded hover:bg-base-200 text-grafite-800/40 hover:text-marca-600">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+      </button>
+      <button title="Excluir" onClick={onExcluir} className="p-1 rounded hover:bg-red-50 text-grafite-800/40 hover:text-red-600">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6" /></svg>
+      </button>
+    </div>
+  );
+}
+
+function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -111,6 +124,7 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido }) {
                           <span className="badge badge-normal">Estoque OK</span>
                         )}
                       </td>
+                      <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -123,7 +137,7 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido }) {
   );
 }
 
-function SecaoAguardandoEnvio({ itens, onEnviar }) {
+function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -147,6 +161,7 @@ function SecaoAguardandoEnvio({ itens, onEnviar }) {
                       </td>
                       <td className="td text-xs whitespace-nowrap"><span className="badge badge-baixo">{it.plataformaNome}</span></td>
                       <td className="td text-xs text-grafite-800/50 whitespace-nowrap">{it.numeroPedido}</td>
+                      <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -245,12 +260,75 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
   );
 }
 
+function ModalEditarPedido({ item, produtos, onClose, onSalvo }) {
+  const [numeroPedido, setNumeroPedido] = useState(item.numeroPedido || '');
+  const [prazoEnvio, setPrazoEnvio] = useState(item.prazoEnvio ? String(item.prazoEnvio).slice(0, 10) : '');
+  const [produtoId, setProdutoId] = useState(item.produtoId ? String(item.produtoId) : '');
+  const [quantidade, setQuantidade] = useState(String(item.quantidade));
+  const [salvando, setSalvando] = useState(false);
+  const toast = useToast();
+  const bloqueadoItem = item.produzido; // produto/quantidade não mudam depois de produzido
+
+  async function salvar() {
+    if (!numeroPedido.trim()) return toast.erro('Informe o número do pedido.');
+    if (!bloqueadoItem && (!produtoId || !(Number(quantidade) > 0))) return toast.erro('Selecione o produto e informe a quantidade.');
+    setSalvando(true);
+    try {
+      await api.put(`/producao/${item.id}`, {
+        numeroPedido: numeroPedido.trim(),
+        prazoEnvio: prazoEnvio || null,
+        produtoId: bloqueadoItem ? undefined : Number(produtoId),
+        quantidade: bloqueadoItem ? undefined : Number(quantidade),
+      });
+      toast.sucesso('Pedido atualizado.');
+      onSalvo();
+    } catch (e) { toast.erro(e.message); }
+    setSalvando(false);
+  }
+
+  return (
+    <Modal titulo="Editar pedido" onClose={onClose} largura="max-w-lg">
+      <div className="space-y-3">
+        <div>
+          <label className="label">Número do pedido *</label>
+          <input className="input" value={numeroPedido} onChange={(e) => setNumeroPedido(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Prazo de envio</label>
+          <input type="date" className="input" value={prazoEnvio} onChange={(e) => setPrazoEnvio(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <label className="label">Produto</label>
+            <select className="input" value={produtoId} disabled={bloqueadoItem} onChange={(e) => setProdutoId(e.target.value)}>
+              <option value="">Selecione</option>
+              {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Quantidade</label>
+            <input type="number" className="input" value={quantidade} disabled={bloqueadoItem} onChange={(e) => setQuantidade(e.target.value)} />
+          </div>
+        </div>
+        {bloqueadoItem && (
+          <p className="text-xs text-grafite-800/50">Este item já foi marcado como produzido — o produto e a quantidade não podem mais ser alterados aqui (o estoque já foi descontado). Para trocar o produto ou a quantidade, exclua e cadastre de novo.</p>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Dashboard() {
   const [d, setD] = useState(null);
   const [producao, setProducao] = useState([]);
   const [plataformas, setPlataformas] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [modalPedidoManual, setModalPedidoManual] = useState(false);
+  const [pedidoEditando, setPedidoEditando] = useState(null);
   const toast = useToast();
 
   function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
@@ -286,6 +364,18 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  async function excluir(item) {
+    const aviso = item.produzido
+      ? `Excluir o pedido ${item.numeroPedido}? O estoque descontado por este item será devolvido.`
+      : `Excluir o pedido ${item.numeroPedido}?`;
+    if (!window.confirm(aviso)) return;
+    try {
+      await api.del(`/producao/${item.id}`);
+      toast.sucesso('Pedido excluído.');
+      setProducao((lista) => lista.filter((it) => it.id !== item.id));
+    } catch (e) { toast.erro(e.message); }
+  }
+
   if (!d) return <p className="text-grafite-800/60">Carregando...</p>;
 
   const itensAProduzir = producao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
@@ -317,8 +407,8 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onNovoPedido={() => setModalPedidoManual(true)} />
-        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={enviar} />
+        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={enviar} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -385,6 +475,15 @@ export default function Dashboard() {
           produtos={produtos}
           onClose={() => setModalPedidoManual(false)}
           onSalvo={() => { setModalPedidoManual(false); recarregarProducao(); }}
+        />
+      )}
+
+      {pedidoEditando && (
+        <ModalEditarPedido
+          item={pedidoEditando}
+          produtos={produtos}
+          onClose={() => setPedidoEditando(null)}
+          onSalvo={() => { setPedidoEditando(null); recarregarProducao(); }}
         />
       )}
     </div>

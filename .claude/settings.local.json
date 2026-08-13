@@ -35,7 +35,21 @@
       "Bash(curl -s http://localhost:3001/api/health)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/api/dashboard)",
       "Bash(curl -s -X POST http://localhost:3001/api/login -H \"Content-Type: application/json\" -d '{\"senha\":\"errada\"}')",
-      "Bash(curl -s -X POST http://localhost:3001/api/login -H \"Content-Type: application/json\" -d '{\"senha\":\"saystore123\"}')"
+      "Bash(curl -s -X POST http://localhost:3001/api/login -H \"Content-Type: application/json\" -d '{\"senha\":\"saystore123\"}')",
+      "Bash(curl -s -i -X POST http://localhost:3001/api/login -H 'Origin: https://say-store.vercel.app' -H 'Content-Type: application/json' -d '{\"senha\":\"saystore123\"}')",
+      "Bash(curl -s -i -X OPTIONS http://localhost:3001/api/login -H 'Origin: https://say-store.vercel.app' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(48\\).toString\\('hex'\\)\\)\")",
+      "Bash(echo \"=== 1. Health check \\(esperado {\\\\\"ok\\\\\":true}\\) ===\")",
+      "Bash(curl -s -m 20 https://say-store-production.up.railway.app/api/health)",
+      "Bash(echo \"\")",
+      "Bash(echo \"=== 2. Rota protegida sem token \\(esperado 401\\) ===\")",
+      "Bash(curl -s -m 20 -o /dev/null -w '%{http_code}\\\\n' https://say-store-production.up.railway.app/api/dashboard)",
+      "Bash(echo \"=== HTML da página inicial ===\")",
+      "Bash(curl -s -m 25 https://say-store-3d9ny7u7i-yasmimanami-hotmailcoms-projects.vercel.app/)",
+      "Bash(echo \"=== 1. Página inicial \\(esperado HTML do app, não 'Redirecting'\\) ===\")",
+      "Bash(curl -s -m 20 -i -X OPTIONS https://say-store-production.up.railway.app/api/login -H 'Origin: https://say-store-3d9ny7u7i-yasmimanami-hotmailcoms-projects.vercel.app' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')",
+      "Bash(echo \"=== 1. Página abre publicamente? ===\")",
+      "Bash(curl -s -m 25 https://say-store-lake.vercel.app/)"
     ]
   }
 }

@@ -1,12 +1,16 @@
 const crypto = require('crypto');
 
-// Segredo usado para assinar o token de acesso. Em produção vem de AUTH_SECRET.
-// O fallback só serve para o desenvolvimento local não quebrar se a variável não estiver definida.
-const SECRET = process.env.AUTH_SECRET || 'dev-secret-troque-em-producao';
 const VALIDADE_MS = 30 * 24 * 3600 * 1000; // 30 dias
 
+// Segredo usado para assinar o token de acesso. Em produção vem de AUTH_SECRET.
+// Lido no momento do uso (não no carregamento do módulo) para não depender da ordem em que
+// as variáveis de ambiente são carregadas. O fallback só serve para o desenvolvimento local.
+function getSecret() {
+  return process.env.AUTH_SECRET || 'dev-secret-troque-em-producao';
+}
+
 function assinar(payloadB64) {
-  return crypto.createHmac('sha256', SECRET).update(payloadB64).digest('hex');
+  return crypto.createHmac('sha256', getSecret()).update(payloadB64).digest('hex');
 }
 
 // Gera um token no formato payloadBase64.assinaturaHex.

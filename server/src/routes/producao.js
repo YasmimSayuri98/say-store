@@ -299,4 +299,101 @@ router.put('/:itemId/vincular', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Editar um pedido da lista de produção: número, prazo de envio e (se ainda não produzido)
+// o produto e a quantidade.
+router.put('/:itemId', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const { numeroPedido, prazoEnvio, produtoId, quantidade } = req.body;
+
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { pedido: true } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+
+    // Número do pedido (se mudou): não pode colidir com outro pedido nem com um envio.
+    const novoNumero = numeroPedido != null && String(numeroPedido).trim() ? String(numeroPedido).trim() : item.pedido.numeroPedido;
+    if (novoNumero !== item.pedido.numeroPedido) {
+      const jaPedido = await prisma.pedidoPlataforma.findUnique({ where: { numeroPedido: novoNumero } });
+      if (jaPedido) return res.status(409).json({ erro: `Já existe um pedido com o número ${novoNumero}.` });
+      const jaEnvio = await prisma.registroEnvio.findUnique({ where: { numeroPedido: novoNumero } });
+      if (jaEnvio) return res.status(409).json({ erro: `Já existe um envio registrado para o pedido ${novoNumero}.` });
+    }
+
+    // Produto/quantidade só podem mudar enquanto o item não foi produzido (estoque ainda não descontado).
+    const querMudarProduto = produtoId != null && Number(produtoId) !== item.produtoId;
+    const querMudarQtd = quantidade != null && Number(quantidade) !== item.quantidade;
+    const dataItem = {};
+    if (querMudarProduto || querMudarQtd) {
+      if (item.produzido) {
+        return res.status(400).json({ erro: 'Este item já foi produzido (estoque descontado). Para mudar o produto ou a quantidade, exclua e cadastre de novo.' });
+      }
+      const idProduto = Number(produtoId != null ? produtoId : item.produtoId);
+      const produto = await prisma.produto.findUnique({ where: { id: idProduto } });
+      if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
+      const qtd = Number(quantidade != null ? quantidade : item.quantidade);
+      if (!(qtd > 0)) return res.status(400).json({ erro: 'Quantidade deve ser maior que zero.' });
+      dataItem.produtoId = produto.id;
+      dataItem.skuPlataforma = produto.sku;
+      dataItem.nomePlataforma = produto.nome;
+      dataItem.quantidade = qtd;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pedidoPlataforma.update({
+        where: { id: item.pedidoId },
+        data: { numeroPedido: novoNumero, prazoEnvio: prazoEnvio ? new Date(prazoEnvio) : null },
+      });
+      if (Object.keys(dataItem).length) {
+        await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: dataItem });
+      }
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+// Excluir um item/pedido da lista de produção. Se o estoque já tiver sido descontado por este
+// item (produzido pela própria lista, sem envio manual), o estoque é estornado antes de excluir.
+router.delete('/:itemId', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { pedido: { include: { plataforma: true } }, produto: { include: { itensFicha: true } } },
+      });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+
+      // Estorna estoque só se foi descontado por esta produção (produzido e sem envio manual associado).
+      if (item.produzido && !item.envioId && item.produto) {
+        for (const fi of item.produto.itensFicha) {
+          const necessario = round4(fi.quantidade * item.quantidade);
+          const material = await tx.material.findUnique({ where: { id: fi.materialId } });
+          const qtdAnterior = material.quantidade;
+          const qtdResultante = round4(qtdAnterior + necessario);
+          await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
+          await tx.movimentacaoEstoque.create({
+            data: {
+              materialId: material.id, tipo: 'ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA',
+              quantidadeAnterior: qtdAnterior, quantidadeMovimentada: necessario,
+              quantidadeResultante: qtdResultante,
+              motivo: `Estorno por exclusão do pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
+            },
+          });
+        }
+      }
+
+      await tx.itemPedidoPlataforma.delete({ where: { id: itemId } });
+      // Se o pedido ficou sem itens, remove o pedido também.
+      const restantes = await tx.itemPedidoPlataforma.count({ where: { pedidoId: item.pedidoId } });
+      if (restantes === 0) await tx.pedidoPlataforma.delete({ where: { id: item.pedidoId } });
+    });
+    res.status(204).end();
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
 module.exports = router;
