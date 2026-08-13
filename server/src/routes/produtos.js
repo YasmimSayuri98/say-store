@@ -79,6 +79,54 @@ router.put('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Gera um SKU único a partir de uma base (ex.: "ABC-COPIA", "ABC-COPIA-2", ...).
+async function gerarSkuUnico(db, base) {
+  let candidato = base;
+  let n = 1;
+  // eslint-disable-next-line no-await-in-loop
+  while (await db.produto.findUnique({ where: { sku: candidato } })) {
+    n += 1;
+    candidato = `${base}-${n}`;
+  }
+  return candidato;
+}
+
+// Duplica um produto (dados + ficha técnica) para facilitar cadastrar um produto parecido.
+// O novo produto nasce com nome "(cópia)" e um SKU novo; a pessoa ajusta em seguida.
+router.post('/:id/duplicar', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const original = await prisma.produto.findUnique({
+      where: { id },
+      include: { itensFicha: true },
+    });
+    if (!original) return res.status(404).json({ erro: 'Produto não encontrado.' });
+
+    const novo = await prisma.$transaction(async (tx) => {
+      const sku = await gerarSkuUnico(tx, `${original.sku}-COPIA`);
+      const criado = await tx.produto.create({
+        data: {
+          nome: `${original.nome} (cópia)`,
+          sku,
+          descricao: original.descricao,
+          ativo: true,
+          personalizado: original.personalizado,
+          custosExtras: original.custosExtras,
+          margemLucroAlvo: original.margemLucroAlvo,
+          itensFicha: {
+            create: original.itensFicha.map((it) => ({ materialId: it.materialId, quantidade: it.quantidade })),
+          },
+        },
+      });
+      await recalcularCustoProduto(tx, criado.id);
+      return criado;
+    });
+
+    const completo = await prisma.produto.findUnique({ where: { id: novo.id } });
+    res.status(201).json(completo);
+  } catch (e) { next(e); }
+});
+
 router.patch('/:id/status', async (req, res, next) => {
   try {
     const produto = await prisma.produto.update({ where: { id: Number(req.params.id) }, data: { ativo: !!req.body.ativo } });

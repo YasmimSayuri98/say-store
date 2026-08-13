@@ -21,6 +21,16 @@ export default function Produtos() {
   function novo() { setEditando({ nome: '', sku: '', descricao: '', personalizado: false }); setModalAberto(true); }
   function editar(p) { setEditando({ ...p }); setModalAberto(true); }
 
+  async function duplicar(p) {
+    try {
+      const copia = await api.post('/produtos/' + p.id + '/duplicar', {});
+      toast.sucesso('Produto duplicado (com a ficha técnica). Ajuste o nome e o SKU.');
+      await carregar();
+      setEditando({ ...copia }); // abre o produto novo já em edição
+      setModalAberto(true);
+    } catch (e) { toast.erro(e.message); }
+  }
+
   async function salvar() {
     try {
       if (editando.id) await api.put('/produtos/' + editando.id, editando);
@@ -57,6 +67,7 @@ export default function Produtos() {
                 <td className="td whitespace-nowrap">
                   <Link to={'/produtos/' + p.id} className="btn btn-primary btn-sm mr-1">Ficha / Custo</Link>
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(p)}>Editar</button>
+                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => duplicar(p)}>Duplicar</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => alternarStatus(p)}>{p.ativo ? 'Inativar' : 'Ativar'}</button>
                 </td>
               </tr>
