@@ -189,9 +189,6 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
 
-  const plataformaSelecionada = plataformas.find((p) => String(p.id) === String(form.plataformaId));
-  const ehTikTok = plataformaSelecionada && plataformaSelecionada.nome.toLowerCase().includes('tiktok');
-
   function addItem() { setItens([...itens, { produtoId: '', quantidade: '' }]); }
   function removeItem(i) { setItens(itens.filter((_, idx) => idx !== i)); }
   function setItem(i, campo, valor) { setItens(itens.map((it, idx) => idx === i ? { ...it, [campo]: valor } : it)); }
@@ -236,12 +233,6 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
           <label className="label">Prazo de envio</label>
           <input type="date" className="input" value={form.prazoEnvio} onChange={(e) => setForm({ ...form, prazoEnvio: e.target.value })} />
         </div>
-        {ehTikTok && (
-          <p className="text-xs text-marca-700 bg-marca-50 border border-marca-100 rounded-lg px-3 py-2">
-            ⚠️ Lembrete: a TikTok costuma exigir envio até 1 dia antes da entrega, mas em períodos de muito
-            pedido pode liberar +1 dia de folga — confira no app da TikTok Shop antes de definir esse prazo.
-          </p>
-        )}
 
         <div>
           <label className="label">Produtos do pedido</label>
