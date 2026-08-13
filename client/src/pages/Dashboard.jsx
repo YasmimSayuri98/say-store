@@ -260,8 +260,9 @@ function ModalPedidoManual({ plataformas, produtos, onClose, onSalvo }) {
   );
 }
 
-function ModalEditarPedido({ item, produtos, onClose, onSalvo }) {
+function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
   const [numeroPedido, setNumeroPedido] = useState(item.numeroPedido || '');
+  const [plataformaId, setPlataformaId] = useState(item.plataformaId ? String(item.plataformaId) : '');
   const [prazoEnvio, setPrazoEnvio] = useState(item.prazoEnvio ? String(item.prazoEnvio).slice(0, 10) : '');
   const [produtoId, setProdutoId] = useState(item.produtoId ? String(item.produtoId) : '');
   const [quantidade, setQuantidade] = useState(String(item.quantidade));
@@ -271,11 +272,13 @@ function ModalEditarPedido({ item, produtos, onClose, onSalvo }) {
 
   async function salvar() {
     if (!numeroPedido.trim()) return toast.erro('Informe o número do pedido.');
+    if (!plataformaId) return toast.erro('Selecione a plataforma.');
     if (!bloqueadoItem && (!produtoId || !(Number(quantidade) > 0))) return toast.erro('Selecione o produto e informe a quantidade.');
     setSalvando(true);
     try {
       await api.put(`/producao/${item.id}`, {
         numeroPedido: numeroPedido.trim(),
+        plataformaId: Number(plataformaId),
         prazoEnvio: prazoEnvio || null,
         produtoId: bloqueadoItem ? undefined : Number(produtoId),
         quantidade: bloqueadoItem ? undefined : Number(quantidade),
@@ -289,6 +292,13 @@ function ModalEditarPedido({ item, produtos, onClose, onSalvo }) {
   return (
     <Modal titulo="Editar pedido" onClose={onClose} largura="max-w-lg">
       <div className="space-y-3">
+        <div>
+          <label className="label">Plataforma *</label>
+          <select className="input" value={plataformaId} onChange={(e) => setPlataformaId(e.target.value)}>
+            <option value="">Selecione</option>
+            {plataformas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
         <div>
           <label className="label">Número do pedido *</label>
           <input className="input" value={numeroPedido} onChange={(e) => setNumeroPedido(e.target.value)} />
@@ -482,6 +492,7 @@ export default function Dashboard() {
         <ModalEditarPedido
           item={pedidoEditando}
           produtos={produtos}
+          plataformas={plataformas}
           onClose={() => setPedidoEditando(null)}
           onSalvo={() => { setPedidoEditando(null); recarregarProducao(); }}
         />

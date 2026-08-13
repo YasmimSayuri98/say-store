@@ -2,17 +2,30 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { moeda, numero, data } from '../format';
+import { useToast } from '../components/Toast';
 
 export default function HistoricoEnvios() {
   const [envios, setEnvios] = useState([]);
   const [plataformas, setPlataformas] = useState([]);
   const [filtro, setFiltro] = useState('');
+  const toast = useToast();
 
-  useEffect(() => { api.get('/plataformas').then(setPlataformas); }, []);
-  useEffect(() => {
+  function carregar() {
     const q = filtro ? '?plataformaId=' + filtro : '';
     api.get('/envios' + q).then(setEnvios);
-  }, [filtro]);
+  }
+
+  useEffect(() => { api.get('/plataformas').then(setPlataformas); }, []);
+  useEffect(() => { carregar(); }, [filtro]);
+
+  async function excluir(e) {
+    if (!window.confirm(`Excluir o envio de ${data(e.dataEnvio)}? O estoque consumido será devolvido e, se o envio veio de um pedido de plataforma, ele voltará para a lista de produção.`)) return;
+    try {
+      await api.del('/envios/' + e.id);
+      toast.sucesso('Envio excluído e estoque estornado.');
+      setEnvios((lista) => lista.filter((x) => x.id !== e.id));
+    } catch (err) { toast.erro(err.message); }
+  }
 
   return (
     <div>
@@ -45,7 +58,12 @@ export default function HistoricoEnvios() {
                 <td className="td">{e.itens.map((i) => `${numero(i.quantidade)}x ${i.produto.nome}`).join(', ')}</td>
                 <td className="td text-right">{moeda(e.faturamentoBruto)}</td>
                 <td className={'td text-right font-medium ' + (e.lucro >= 0 ? 'text-green-700' : 'text-red-600')}>{moeda(e.lucro)}</td>
-                <td className="td"><Link to={'/envios/' + e.id} className="btn btn-secondary btn-sm">Detalhes</Link></td>
+                <td className="td">
+                  <div className="flex items-center gap-2">
+                    <Link to={'/envios/' + e.id} className="btn btn-secondary btn-sm">Detalhes</Link>
+                    <button onClick={() => excluir(e)} className="btn btn-danger btn-sm">Excluir</button>
+                  </div>
+                </td>
               </tr>
             ))}
             {envios.length === 0 && <tr><td className="td text-grafite-800/40" colSpan={6}>Nenhum envio.</td></tr>}

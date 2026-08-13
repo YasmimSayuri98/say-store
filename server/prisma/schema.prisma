@@ -22,9 +22,11 @@ model UnidadeMedida {
 }
 
 model Fornecedor {
-  id       Int              @id @default(autoincrement())
-  nome     String           @unique
-  entradas EntradaEstoque[]
+  id        Int              @id @default(autoincrement())
+  nome      String           @unique
+  tipo      String           @default("FISICA")  // FISICA | ECOMMERCE
+  ecommerce String?          // nome do ecommerce quando tipo = ECOMMERCE
+  entradas  EntradaEstoque[]
 }
 
 model Material {

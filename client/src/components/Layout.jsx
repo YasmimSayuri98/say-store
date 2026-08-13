@@ -16,6 +16,7 @@ const grupos = [
     links: [
       { to: '/materiais', label: 'Materiais', icone: 'M20 7L12 3 4 7v10l8 4 8-4V7zM4 7l8 4 8-4M12 11v10' },
       { to: '/entradas', label: 'Entrada de estoque', icone: 'M12 5v14M5 12l7 7 7-7' },
+      { to: '/fornecedores', label: 'Fornecedores', icone: 'M3 7h18v12H3zM3 7l2-3h14l2 3M9 12h6' },
       { to: '/ajustes', label: 'Ajuste manual', icone: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z' },
       { to: '/lista-compras', label: 'Lista de compras', icone: 'M6 2l1.5 4h13L19 14H8L6 2zM8 20a1 1 0 100 2 1 1 0 000-2zM18 20a1 1 0 100 2 1 1 0 000-2z' },
     ],

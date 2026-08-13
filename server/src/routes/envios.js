@@ -279,6 +279,58 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Excluir um envio: estorna o estoque consumido, desfaz o vínculo com a Produção por plataforma
+// (os itens voltam a ficar pendentes) e remove o registro do histórico.
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    await prisma.$transaction(async (tx) => {
+      const envio = await tx.registroEnvio.findUnique({
+        where: { id },
+        include: { movimentacoes: { include: { material: true } }, itensPedidosPlataforma: true },
+      });
+      if (!envio) throw Object.assign(new Error('Envio não encontrado.'), { status: 404 });
+
+      // Estorna o estoque descontado por este envio (movimentações de saída).
+      for (const mov of envio.movimentacoes) {
+        if (mov.tipo !== 'SAIDA_ENVIO') continue;
+        const material = await tx.material.findUnique({ where: { id: mov.materialId } });
+        const qtdAnterior = material.quantidade;
+        const qtdResultante = round4(qtdAnterior + mov.quantidadeMovimentada);
+        await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
+        await tx.movimentacaoEstoque.create({
+          data: {
+            materialId: material.id, tipo: 'ESTORNO',
+            quantidadeAnterior: qtdAnterior, quantidadeMovimentada: mov.quantidadeMovimentada,
+            quantidadeResultante: qtdResultante,
+            motivo: `Estorno por exclusão do envio #${envio.id}`,
+          },
+        });
+      }
+
+      // Os itens de pedido de plataforma cobertos por este envio voltam a ficar pendentes
+      // (produção + envio desfeitos), já que o estoque foi devolvido acima.
+      for (const it of envio.itensPedidosPlataforma) {
+        await tx.itemPedidoPlataforma.update({
+          where: { id: it.id },
+          data: { envioId: null, produzido: false, produzidoEm: null, enviado: false, enviadoEm: null },
+        });
+      }
+
+      // Solta as movimentações antigas deste envio antes de removê-lo (FK ON DELETE SET NULL,
+      // mas garantimos explicitamente para não deixar histórico órfão apontando para o envio).
+      await tx.movimentacaoEstoque.updateMany({ where: { envioId: id }, data: { envioId: null } });
+
+      // Remove o envio (ItemRegistroEnvio é apagado em cascata).
+      await tx.registroEnvio.delete({ where: { id } });
+    });
+    res.status(204).end();
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const envio = await prisma.registroEnvio.findUnique({

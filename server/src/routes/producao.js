@@ -304,10 +304,18 @@ router.put('/:itemId/vincular', async (req, res, next) => {
 router.put('/:itemId', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
-    const { numeroPedido, prazoEnvio, produtoId, quantidade } = req.body;
+    const { numeroPedido, prazoEnvio, produtoId, quantidade, plataformaId } = req.body;
 
     const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { pedido: true } });
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+
+    // Plataforma (se mudou): valida que existe.
+    let novaPlataformaId = item.pedido.plataformaId;
+    if (plataformaId != null && Number(plataformaId) !== item.pedido.plataformaId) {
+      const plataforma = await prisma.plataformaVenda.findUnique({ where: { id: Number(plataformaId) } });
+      if (!plataforma) return res.status(404).json({ erro: 'Plataforma não encontrada.' });
+      novaPlataformaId = plataforma.id;
+    }
 
     // Número do pedido (se mudou): não pode colidir com outro pedido nem com um envio.
     const novoNumero = numeroPedido != null && String(numeroPedido).trim() ? String(numeroPedido).trim() : item.pedido.numeroPedido;
@@ -340,7 +348,7 @@ router.put('/:itemId', async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       await tx.pedidoPlataforma.update({
         where: { id: item.pedidoId },
-        data: { numeroPedido: novoNumero, prazoEnvio: prazoEnvio ? new Date(prazoEnvio) : null },
+        data: { numeroPedido: novoNumero, prazoEnvio: prazoEnvio ? new Date(prazoEnvio) : null, plataformaId: novaPlataformaId },
       });
       if (Object.keys(dataItem).length) {
         await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: dataItem });

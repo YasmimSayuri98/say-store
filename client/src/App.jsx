@@ -8,6 +8,7 @@ import { estaLogado } from './auth';
 import Dashboard from './pages/Dashboard';
 import Materiais from './pages/Materiais';
 import Entradas from './pages/Entradas';
+import Fornecedores from './pages/Fornecedores';
 import Produtos from './pages/Produtos';
 import ProdutoDetalhe from './pages/ProdutoDetalhe';
 import Envios from './pages/Envios';
@@ -46,6 +47,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="materiais" element={<Materiais />} />
             <Route path="entradas" element={<Entradas />} />
+            <Route path="fornecedores" element={<Fornecedores />} />
             <Route path="produtos" element={<Produtos />} />
             <Route path="produtos/:id" element={<ProdutoDetalhe />} />
             <Route path="envios" element={<Envios />} />
