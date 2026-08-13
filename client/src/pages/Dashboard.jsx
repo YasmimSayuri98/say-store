@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { moeda, numero, dataHora, data } from '../format';
+import { moeda, numero, dataHora, data, dataDia, diaISO } from '../format';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 
@@ -26,20 +26,16 @@ function Atalho({ to, label, icone }) {
   );
 }
 
-// Dia (YYYY-MM-DD) no fuso de Brasília, para comparar prazos sem escorregar de dia por fuso.
-function diaBrasilia(v) {
-  return new Date(v).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
-
 function rotuloPrazo(prazoEnvio) {
   if (!prazoEnvio) return 'Sem prazo definido';
-  const hoje = new Date(diaBrasilia(new Date()) + 'T00:00:00');
-  const d = new Date(diaBrasilia(prazoEnvio) + 'T00:00:00');
+  // Hoje no fuso de Brasília; prazo pelo seu dia em UTC (correto para pedidos antigos e novos).
+  const hoje = new Date(diaISO(new Date(), 'America/Sao_Paulo') + 'T00:00:00');
+  const d = new Date(diaISO(prazoEnvio, 'UTC') + 'T00:00:00');
   const diffDias = Math.round((d - hoje) / 86400000);
   if (diffDias < 0) return 'Atrasado';
   if (diffDias === 0) return 'Hoje';
   if (diffDias === 1) return 'Amanhã';
-  return data(prazoEnvio);
+  return dataDia(prazoEnvio);
 }
 
 function agruparPorPrazo(itens) {
