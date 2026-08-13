@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { parseDataDia } = require('../utils/data');
+const { aplicarEmbalagens } = require('../services/embalagemService');
 const router = express.Router();
 
 // Calcula, a partir da ficha técnica do produto, se há estoque suficiente para a quantidade pedida.
@@ -260,21 +261,30 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
 });
 
 // Etapa final: marca o item como enviado (some das listas de produção/aguardando envio).
+// Aceita `embalagens` (opcional): a embalagem usada é baixada do estoque, vinculada ao pedido.
 router.post('/:itemId/enviar', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
-    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { produto: true } });
-    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
-    if (item.enviado) return res.status(409).json({ erro: 'Este item já foi marcado como enviado.' });
-    if (!item.produzido) return res.status(400).json({ erro: 'Marque o produto como feito antes de enviar.' });
-    if (item.produto && item.produto.personalizado && !item.fotoImpressa) {
-      return res.status(400).json({ erro: 'Marque a foto como impressa antes de enviar (produto personalizado).' });
-    }
-    const atualizado = await prisma.itemPedidoPlataforma.update({
-      where: { id: itemId }, data: { enviado: true, enviadoEm: new Date() },
+    const resultado = await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { produto: true } });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (item.enviado) throw Object.assign(new Error('Este item já foi marcado como enviado.'), { status: 409 });
+      if (!item.produzido) throw Object.assign(new Error('Marque o produto como feito antes de enviar.'), { status: 400 });
+      if (item.produto && item.produto.personalizado && !item.fotoImpressa) {
+        throw Object.assign(new Error('Marque a foto como impressa antes de enviar (produto personalizado).'), { status: 400 });
+      }
+
+      await aplicarEmbalagens(tx, req.body.embalagens, { pedidoId: item.pedidoId });
+
+      return tx.itemPedidoPlataforma.update({
+        where: { id: itemId }, data: { enviado: true, enviadoEm: new Date() },
+      });
     });
-    res.json(atualizado);
-  } catch (e) { next(e); }
+    res.json(resultado);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
 });
 
 router.post('/:itemId/enviar/desfazer', async (req, res, next) => {

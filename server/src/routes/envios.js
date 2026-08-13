@@ -3,6 +3,7 @@ const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { parseDataDia } = require('../utils/data');
 const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
+const { aplicarEmbalagens, estornarEmbalagensDoEnvio } = require('../services/embalagemService');
 const router = express.Router();
 
 // Consolida o consumo de materiais a partir de uma lista de {produtoId, quantidade}.
@@ -236,6 +237,14 @@ router.post('/', async (req, res, next) => {
         });
       }
 
+      // Embalagem usada neste envio (opcional): baixa os materiais de embalagem do estoque e
+      // grava o custo (não afeta o lucro do produto — é controle separado).
+      const custoEmbalagem = await aplicarEmbalagens(tx, req.body.embalagens, { envioId: envio.id });
+      if (custoEmbalagem > 0) {
+        await tx.registroEnvio.update({ where: { id: envio.id }, data: { custoEmbalagem } });
+        envio.custoEmbalagem = custoEmbalagem; // reflete no objeto retornado
+      }
+
       // Vincula automaticamente os itens ainda pendentes desse pedido na Produção por plataforma
       // (mesmo produto incluído neste envio), marcando como produzidos E enviados SEM descontar
       // o estoque de novo — a baixa já foi feita acima pelo envio manual, e o próprio envio já
@@ -308,6 +317,9 @@ router.delete('/:id', async (req, res, next) => {
           },
         });
       }
+
+      // Estorna também os materiais de embalagem usados neste envio.
+      await estornarEmbalagensDoEnvio(tx, id);
 
       // Os itens de pedido de plataforma cobertos por este envio voltam a ficar pendentes
       // (produção + envio desfeitos), já que o estoque foi devolvido acima.

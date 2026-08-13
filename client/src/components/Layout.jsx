@@ -27,6 +27,7 @@ const grupos = [
       { to: '/produtos', label: 'Produtos', icone: 'M20 7L12 3 4 7v10l8 4 8-4V7zM12 11v10M4 7l8 4 8-4' },
       { to: '/envios', label: 'Registrar envios', icone: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z' },
       { to: '/historico-envios', label: 'Histórico de envios', icone: 'M12 8v4l3 3M3 12a9 9 0 1018 0 9 9 0 00-18 0z' },
+      { to: '/embalagens', label: 'Embalagens', icone: 'M21 8l-9-5-9 5m18 0l-9 5-9-5m18 0v8l-9 5-9-5V8' },
     ],
   },
   {

@@ -48,6 +48,7 @@ model Material {
   entradas    EntradaEstoque[]
   movimentacoes MovimentacaoEstoque[]
   itensFicha  ItemFichaTecnica[]
+  itensEmbalagem ItemEmbalagem[]
   ajustes     AjusteEstoque[]
 }
 
@@ -147,6 +148,7 @@ model RegistroEnvio {
   faturamentoBruto    Float    @default(0)  // Σ preço de venda × quantidade
   totalTaxas          Float    @default(0)  // comissão + taxa fixa da plataforma
   custoTotalProdutos  Float    @default(0)  // custo final (materiais + extras) × quantidade
+  custoEmbalagem      Float    @default(0)  // custo dos materiais de embalagem usados neste envio
   lucro               Float    @default(0)  // faturamento − taxas − custo dos produtos
   criadoEm            DateTime @default(now())
 
@@ -154,6 +156,7 @@ model RegistroEnvio {
   itens                  ItemRegistroEnvio[]
   movimentacoes          MovimentacaoEstoque[]
   itensPedidosPlataforma ItemPedidoPlataforma[]
+  usosEmbalagem          UsoEmbalagem[]
 }
 
 model ItemRegistroEnvio {
@@ -170,7 +173,7 @@ model ItemRegistroEnvio {
 model MovimentacaoEstoque {
   id                  Int      @id @default(autoincrement())
   materialId          Int
-  tipo                String   // ENTRADA_COMPRA, SAIDA_ENVIO, AJUSTE_POSITIVO, AJUSTE_NEGATIVO, CORRECAO, ESTORNO, SAIDA_PRODUCAO_PLATAFORMA, ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA
+  tipo                String   // ENTRADA_COMPRA, SAIDA_ENVIO, SAIDA_EMBALAGEM, AJUSTE_POSITIVO, AJUSTE_NEGATIVO, CORRECAO, ESTORNO, SAIDA_PRODUCAO_PLATAFORMA, ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA
   quantidadeAnterior  Float
   quantidadeMovimentada Float
   quantidadeResultante Float
@@ -179,11 +182,13 @@ model MovimentacaoEstoque {
   produtoId           Int?
   envioId             Int?
   itemPedidoPlataformaId Int?
+  usoEmbalagemId      Int?
   criadoEm            DateTime @default(now())
 
   material             Material              @relation(fields: [materialId], references: [id])
   envio                RegistroEnvio?        @relation(fields: [envioId], references: [id])
   itemPedidoPlataforma ItemPedidoPlataforma? @relation(fields: [itemPedidoPlataformaId], references: [id])
+  usoEmbalagem         UsoEmbalagem?         @relation(fields: [usoEmbalagemId], references: [id])
 }
 
 model AjusteEstoque {
@@ -317,6 +322,7 @@ model PedidoPlataforma {
 
   plataforma PlataformaVenda        @relation(fields: [plataformaId], references: [id])
   itens      ItemPedidoPlataforma[]
+  usosEmbalagem UsoEmbalagem[]
 }
 
 model ItemPedidoPlataforma {
@@ -341,4 +347,51 @@ model ItemPedidoPlataforma {
   movimentacoes MovimentacaoEstoque[]
 
   @@unique([pedidoId, skuPlataforma])
+}
+
+// ---------- Embalagem de envio ----------
+// Tipo de embalagem = um "kit" de materiais (caixa, fita, plástico bolha, etiqueta...) com
+// quantidades. Na hora do envio a pessoa escolhe qual embalagem usou; o consumo é baixado do
+// estoque (UsoEmbalagem). NÃO entra no custo/preço do produto — é controle separado.
+
+model Embalagem {
+  id           Int             @id @default(autoincrement())
+  nome         String          @unique
+  ativo        Boolean         @default(true)
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  itens ItemEmbalagem[]
+  usos  UsoEmbalagem[]
+}
+
+model ItemEmbalagem {
+  id          Int   @id @default(autoincrement())
+  embalagemId Int
+  materialId  Int
+  quantidade  Float
+
+  embalagem Embalagem @relation(fields: [embalagemId], references: [id], onDelete: Cascade)
+  material  Material  @relation(fields: [materialId], references: [id])
+
+  @@unique([embalagemId, materialId])
+}
+
+// Registro de uma embalagem efetivamente usada num envio (quantos pacotes daquele tipo).
+// Pode estar vinculado a um RegistroEnvio (tela Registrar envio) ou a um PedidoPlataforma
+// (marcar "enviado" no Dashboard). custoTotal é um snapshot para os relatórios de envio.
+model UsoEmbalagem {
+  id          Int      @id @default(autoincrement())
+  embalagemId Int
+  quantidade  Float    @default(1)
+  custoTotal  Float    @default(0)
+  data        DateTime @default(now())
+  envioId     Int?
+  pedidoId    Int?
+  criadoEm    DateTime @default(now())
+
+  embalagem     Embalagem             @relation(fields: [embalagemId], references: [id])
+  envio         RegistroEnvio?        @relation(fields: [envioId], references: [id])
+  pedido        PedidoPlataforma?     @relation(fields: [pedidoId], references: [id])
+  movimentacoes MovimentacaoEstoque[]
 }

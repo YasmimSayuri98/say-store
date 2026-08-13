@@ -4,6 +4,7 @@ import { api } from '../api';
 import { moeda, numero, dataHora, data, dataDia, diaISO } from '../format';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
+import SeletorEmbalagens, { linhasEmbalagemPayload } from '../components/SeletorEmbalagens';
 
 function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false }) {
   return (
@@ -362,6 +363,37 @@ function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
   );
 }
 
+// Modal ao marcar um item como enviado: pergunta qual embalagem foi usada (opcional) para
+// baixar do estoque. Não afeta preço/lucro — é só controle de estoque.
+function ModalEnviar({ item, onClose, onEnviado }) {
+  const [embalagens, setEmbalagens] = useState([]);
+  const [salvando, setSalvando] = useState(false);
+  const toast = useToast();
+
+  async function confirmar() {
+    setSalvando(true);
+    try {
+      await api.post(`/producao/${item.id}/enviar`, { embalagens: linhasEmbalagemPayload(embalagens) });
+      toast.sucesso(`${item.produtoNome} marcado como enviado.`);
+      onEnviado(item);
+    } catch (e) { toast.erro(e.message); }
+    setSalvando(false);
+  }
+
+  return (
+    <Modal titulo="Marcar como enviado" onClose={onClose} largura="max-w-lg">
+      <p className="text-sm text-grafite-800/70 mb-3">
+        <span className="font-medium">{item.produtoNome} × {numero(item.quantidade)}</span> — pedido {item.numeroPedido}
+      </p>
+      <SeletorEmbalagens linhas={embalagens} setLinhas={setEmbalagens} />
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>{salvando ? 'Enviando...' : 'Confirmar envio'}</button>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Dashboard() {
   const [d, setD] = useState(null);
   const [producao, setProducao] = useState([]);
@@ -369,6 +401,7 @@ export default function Dashboard() {
   const [produtos, setProdutos] = useState([]);
   const [modalPedidoManual, setModalPedidoManual] = useState(false);
   const [pedidoEditando, setPedidoEditando] = useState(null);
+  const [enviandoItem, setEnviandoItem] = useState(null);
   const toast = useToast();
 
   function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
@@ -396,12 +429,9 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
-  async function enviar(item) {
-    try {
-      await api.post(`/producao/${item.id}/enviar`, {});
-      toast.sucesso(`${item.produtoNome} marcado como enviado.`);
-      setProducao((lista) => lista.filter((it) => it.id !== item.id));
-    } catch (e) { toast.erro(e.message); }
+  function onEnviado(item) {
+    setEnviandoItem(null);
+    setProducao((lista) => lista.filter((it) => it.id !== item.id));
   }
 
   async function excluir(item) {
@@ -448,7 +478,7 @@ export default function Dashboard() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
-        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={enviar} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={setEnviandoItem} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -525,6 +555,14 @@ export default function Dashboard() {
           plataformas={plataformas}
           onClose={() => setPedidoEditando(null)}
           onSalvo={() => { setPedidoEditando(null); recarregarProducao(); }}
+        />
+      )}
+
+      {enviandoItem && (
+        <ModalEnviar
+          item={enviandoItem}
+          onClose={() => setEnviandoItem(null)}
+          onEnviado={onEnviado}
         />
       )}
     </div>

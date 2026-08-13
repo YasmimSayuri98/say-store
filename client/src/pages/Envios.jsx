@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { moeda, numero } from '../format';
 import { useToast } from '../components/Toast';
+import SeletorEmbalagens, { linhasEmbalagemPayload } from '../components/SeletorEmbalagens';
 
 export default function Envios() {
   const [produtos, setProdutos] = useState([]);
@@ -11,6 +12,7 @@ export default function Envios() {
   const [dataEnvio, setDataEnvio] = useState('');
   const [observacao, setObservacao] = useState('');
   const [numeroPedido, setNumeroPedido] = useState('');
+  const [embalagens, setEmbalagens] = useState([]);
   const [resumo, setResumo] = useState(null);
   const toast = useToast();
 
@@ -45,9 +47,10 @@ export default function Envios() {
       await api.post('/envios', {
         itens: validos, plataformaId: plataformaId || undefined, dataEnvio: dataEnvio || undefined,
         observacao: observacao || undefined, numeroPedido: numeroPedido || undefined,
+        embalagens: linhasEmbalagemPayload(embalagens),
       });
       toast.sucesso('Envio confirmado e estoque baixado.');
-      setItens([{ produtoId: '', quantidade: '' }]); setResumo(null); setObservacao(''); setDataEnvio(''); setNumeroPedido('');
+      setItens([{ produtoId: '', quantidade: '' }]); setResumo(null); setObservacao(''); setDataEnvio(''); setNumeroPedido(''); setEmbalagens([]);
     } catch (e) { toast.erro(e.message); }
   }
 
@@ -88,8 +91,15 @@ export default function Envios() {
             </div>
           ))}
         </div>
-        <div className="flex gap-2 mt-3">
+        <div className="mt-3">
           <button className="btn btn-secondary" onClick={addItem}>+ Adicionar produto</button>
+        </div>
+
+        <div className="mt-4 pt-4 border-t">
+          <SeletorEmbalagens linhas={embalagens} setLinhas={setEmbalagens} />
+        </div>
+
+        <div className="flex justify-end mt-4">
           <button className="btn btn-primary" onClick={preview}>Ver resumo</button>
         </div>
       </div>
