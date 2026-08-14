@@ -77,7 +77,12 @@ function AcoesLinha({ onEditar, onExcluir }) {
   );
 }
 
-function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEditar, onExcluir }) {
+// Classe de um passo do checklist: "ativo" (clicável) fica destacado; senão, apagado.
+function chkCls(ativo) {
+  return `flex items-center gap-1.5 text-xs ${ativo ? 'cursor-pointer text-grafite-800/70' : 'text-grafite-800/40'}`;
+}
+
+function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onEmbalar, onNovoPedido, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -107,27 +112,31 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEdita
                           {it.observacao && (
                             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>
                           )}
-                          <div className="flex items-center gap-3">
-                            <label className={`flex items-center gap-1.5 text-xs ${it.produzido || it.semVinculo || !it.estoqueSuficiente ? 'text-grafite-800/40' : 'cursor-pointer text-grafite-800/70'}`}>
-                              <input
-                                type="checkbox"
-                                checked={it.produzido}
-                                disabled={it.produzido || it.semVinculo || !it.estoqueSuficiente}
-                                onChange={() => onProduzir(it)}
-                              />
-                              Produto feito
-                            </label>
+                          <div className="flex items-center gap-3 flex-wrap">
                             {it.personalizado && (
-                              <label className={`flex items-center gap-1.5 text-xs ${it.fotoImpressa ? 'text-grafite-800/40' : 'cursor-pointer text-grafite-800/70'}`}>
-                                <input
-                                  type="checkbox"
-                                  checked={it.fotoImpressa}
-                                  disabled={it.fotoImpressa}
-                                  onChange={() => onMarcarFoto(it)}
-                                />
+                              <label className={chkCls(!it.fotoImpressa && !it.semVinculo)}>
+                                <input type="checkbox" checked={it.fotoImpressa} disabled={it.fotoImpressa} onChange={() => onMarcarFoto(it)} />
                                 Foto impressa
                               </label>
                             )}
+                            <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && !(it.personalizado && !it.fotoImpressa) && it.estoqueSuficiente)}>
+                              <input
+                                type="checkbox"
+                                checked={it.produzido || it.cobertoPorEstoque}
+                                disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || (it.personalizado && !it.fotoImpressa) || !it.estoqueSuficiente}
+                                onChange={() => onProduzir(it)}
+                              />
+                              {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
+                            </label>
+                            <label className={chkCls(!it.embalado && !it.semVinculo && !(it.personalizado && !it.fotoImpressa) && (it.produzido || it.cobertoPorEstoque))}>
+                              <input
+                                type="checkbox"
+                                checked={it.embalado}
+                                disabled={it.embalado || it.semVinculo || (it.personalizado && !it.fotoImpressa) || (!it.produzido && !it.cobertoPorEstoque)}
+                                onChange={() => onEmbalar(it)}
+                              />
+                              Embalado
+                            </label>
                           </div>
                         </div>
                       </td>
@@ -141,10 +150,12 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onNovoPedido, onEdita
                       <td className="td text-right whitespace-nowrap">
                         {it.semVinculo ? (
                           <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
+                        ) : it.cobertoPorEstoque ? (
+                          <span className="badge badge-normal" title={`${numero(it.estoqueProduto)} em estoque`}>✓ Tem estoque</span>
                         ) : !it.estoqueSuficiente ? (
                           <span className="badge badge-sem">Faltam materiais</span>
                         ) : (
-                          <span className="badge badge-normal">Estoque OK</span>
+                          <span className="badge badge-baixo">Produzir</span>
                         )}
                       </td>
                       <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
@@ -421,6 +432,14 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  async function embalar(item) {
+    try {
+      await api.post(`/producao/${item.id}/embalar`, {});
+      toast.sucesso(`${item.produtoNome} embalado.`);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
   async function marcarFoto(item) {
     try {
       await api.post(`/producao/${item.id}/foto-impressa`, {});
@@ -477,7 +496,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={setEnviandoItem} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">

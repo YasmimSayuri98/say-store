@@ -1,15 +1,51 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { moeda } from '../format';
+import { moeda, numero } from '../format';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+
+// Modal para produzir unidades e lançar no estoque de produto pronto.
+function ModalProduzirEstoque({ produto, onClose, onFeito }) {
+  const [quantidade, setQuantidade] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const toast = useToast();
+
+  async function salvar() {
+    if (!(Number(quantidade) > 0)) return toast.erro('Informe a quantidade a produzir.');
+    setSalvando(true);
+    try {
+      await api.post(`/produtos/${produto.id}/produzir-estoque`, { quantidade: Number(quantidade) });
+      toast.sucesso(`${quantidade} un de ${produto.nome} lançadas no estoque (material descontado).`);
+      onFeito();
+    } catch (e) { toast.erro(e.message); }
+    setSalvando(false);
+  }
+
+  return (
+    <Modal titulo={`Produzir para estoque · ${produto.nome}`} onClose={onClose}>
+      <p className="text-sm text-grafite-800/70 mb-3">
+        Estoque atual: <span className="font-medium">{numero(produto.estoque)} un</span>. Ao produzir, o material da
+        ficha técnica é descontado e as unidades entram no estoque de produto pronto.
+      </p>
+      <div>
+        <label className="label">Quantidade a produzir *</label>
+        <input type="number" min="1" step="1" className="input" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} autoFocus />
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Produzindo...' : 'Produzir'}</button>
+      </div>
+    </Modal>
+  );
+}
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState([]);
   const [busca, setBusca] = useState('');
   const [editando, setEditando] = useState(null);
   const [modalAberto, setModalAberto] = useState(false);
+  const [produzindo, setProduzindo] = useState(null);
   const toast = useToast();
 
   async function carregar() {
@@ -54,7 +90,7 @@ export default function Produtos() {
 
       <div className="card overflow-x-auto">
         <table className="w-full">
-          <thead><tr><th className="th">Nome</th><th className="th">SKU</th><th className="th">Custo de materiais</th><th className="th">Ações</th></tr></thead>
+          <thead><tr><th className="th">Nome</th><th className="th">SKU</th><th className="th text-right">Estoque pronto</th><th className="th">Custo de materiais</th><th className="th">Ações</th></tr></thead>
           <tbody>
             {produtos.map((p) => (
               <tr key={p.id} className={!p.ativo ? 'opacity-50' : ''}>
@@ -63,16 +99,18 @@ export default function Produtos() {
                   {p.personalizado && <span className="badge badge-baixo ml-2">Personalizado</span>}
                 </td>
                 <td className="td">{p.sku}</td>
+                <td className="td text-right tabular-nums font-medium">{numero(p.estoque)} un</td>
                 <td className="td">{moeda(p.custoAtualMateriais)}</td>
                 <td className="td whitespace-nowrap">
                   <Link to={'/produtos/' + p.id} className="btn btn-primary btn-sm mr-1">Ficha / Custo</Link>
+                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => setProduzindo(p)}>Produzir</button>
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(p)}>Editar</button>
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => duplicar(p)}>Duplicar</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => alternarStatus(p)}>{p.ativo ? 'Inativar' : 'Ativar'}</button>
                 </td>
               </tr>
             ))}
-            {produtos.length === 0 && <tr><td className="td text-grafite-800/40" colSpan={4}>Nenhum produto.</td></tr>}
+            {produtos.length === 0 && <tr><td className="td text-grafite-800/40" colSpan={5}>Nenhum produto.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -93,6 +131,14 @@ export default function Produtos() {
             <button className="btn btn-primary" onClick={salvar}>Salvar</button>
           </div>
         </Modal>
+      )}
+
+      {produzindo && (
+        <ModalProduzirEstoque
+          produto={produzindo}
+          onClose={() => setProduzindo(null)}
+          onFeito={() => { setProduzindo(null); carregar(); }}
+        />
       )}
     </div>
   );

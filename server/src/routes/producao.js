@@ -3,6 +3,7 @@ const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { parseDataDia } = require('../utils/data');
 const { aplicarEmbalagens } = require('../services/embalagemService');
+const { marcarProduzido, desfazerProduzido } = require('../services/producaoEstoqueService');
 const router = express.Router();
 
 // Calcula, a partir da ficha técnica do produto, se há estoque suficiente para a quantidade pedida.
@@ -40,10 +41,29 @@ router.get('/', async (req, res, next) => {
       orderBy: [{ pedido: { prazoEnvio: 'asc' } }],
     });
 
+    // Aloca o estoque de produto pronto aos itens ainda NÃO produzidos, por prazo (mais próximo
+    // primeiro), para saber quais pedidos "já têm estoque" e quais precisam ser produzidos.
+    const estoqueRestante = new Map(); // produtoId -> unidades disponíveis
+    for (const it of itens) {
+      if (it.produto && !estoqueRestante.has(it.produtoId)) estoqueRestante.set(it.produtoId, it.produto.estoque);
+    }
+    const cobertoPorId = new Map(); // itemId -> bool
+    for (const it of itens) {
+      if (!it.produtoId || it.produzido) continue;
+      const rest = estoqueRestante.get(it.produtoId) || 0;
+      if (rest >= it.quantidade) {
+        cobertoPorId.set(it.id, true);
+        estoqueRestante.set(it.produtoId, round4(rest - it.quantidade));
+      } else {
+        cobertoPorId.set(it.id, false);
+      }
+    }
+
     const resultado = itens.map((it) => {
       const check = checarEstoque(it.produto, it.quantidade);
       const personalizado = !!(it.produto && it.produto.personalizado);
-      const prontoParaEnviar = it.produzido && (!personalizado || it.fotoImpressa);
+      const cobertoPorEstoque = !!cobertoPorId.get(it.id);
+      const produzidoOuCoberto = it.produzido || cobertoPorEstoque;
       return {
         id: it.id,
         pedidoId: it.pedidoId,
@@ -61,11 +81,17 @@ router.get('/', async (req, res, next) => {
         semVinculo: !it.produtoId,
         estoqueSuficiente: check.suficiente,
         faltando: check.faltando,
+        estoqueProduto: it.produto ? it.produto.estoque : 0,
+        cobertoPorEstoque,
         personalizado,
         fotoImpressa: it.fotoImpressa,
         produzido: it.produzido,
-        fase: prontoParaEnviar ? 'AGUARDANDO_ENVIO' : 'PRODUCAO',
-        prontoParaEnviar,
+        produzidoDoEstoque: it.produzidoDoEstoque,
+        embalado: it.embalado,
+        // Só aparece em "Aguardando envio" quando embalado. Antes disso está em produção.
+        fase: it.embalado ? 'AGUARDANDO_ENVIO' : 'PRODUCAO',
+        prontoParaProduzir: !it.produzido && !cobertoPorEstoque,
+        produzidoOuCoberto,
       };
     });
 
@@ -135,57 +161,33 @@ router.post('/:itemId/produzir', async (req, res, next) => {
         include: { pedido: { include: { plataforma: true } }, produto: { include: { itensFicha: { include: { material: true } } } } },
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
-      if (item.produzido) throw Object.assign(new Error('Este item já foi marcado como produzido (estoque já descontado).'), { status: 409 });
+      if (item.produzido) throw Object.assign(new Error('Este item já foi marcado como produzido.'), { status: 409 });
       if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto do catálogo a este item antes de marcar como produzido.'), { status: 400 });
+      if (item.produto.personalizado && !item.fotoImpressa) throw Object.assign(new Error('Marque a foto como impressa antes de produzir (produto personalizado).'), { status: 400 });
 
       // Já existe um envio manual registrado para este número de pedido cobrindo este mesmo
-      // produto? Então o estoque já foi descontado por lá — só marca como produzido, sem
+      // produto? Então o estoque já foi descontado por lá — só marca o ciclo completo, sem
       // descontar de novo (evita duplicidade entre Envios e a Produção por plataforma).
       const envioExistente = await tx.registroEnvio.findUnique({
         where: { numeroPedido: item.pedido.numeroPedido },
         include: { itens: true },
       });
-      // Um envio manual já cobrindo este pedido representa o ciclo completo (produção + envio),
-      // então marca as duas etapas de uma vez, sem descontar o estoque de novo.
       const jaCobertoPorEnvio = envioExistente && envioExistente.itens.some((i) => i.produtoId === item.produtoId);
       if (jaCobertoPorEnvio) {
         const agora = new Date();
         return tx.itemPedidoPlataforma.update({
           where: { id: item.id },
-          data: { produzido: true, produzidoEm: agora, envioId: envioExistente.id, enviado: true, enviadoEm: agora },
+          data: { produzido: true, produzidoEm: agora, embalado: true, embaladoEm: agora, envioId: envioExistente.id, enviado: true, enviadoEm: agora },
         });
       }
 
-      if (item.produto.itensFicha.length === 0) throw Object.assign(new Error(`Produto sem ficha técnica: ${item.produto.nome}.`), { status: 400 });
+      // Consome do estoque de produto pronto se houver; senão desconta os materiais da ficha.
+      const { produzidoDoEstoque } = await marcarProduzido(tx, item, item.produto);
 
-      const consumo = item.produto.itensFicha.map((fi) => ({
-        material: fi.material,
-        necessario: round4(fi.quantidade * item.quantidade),
-      }));
-      const faltando = consumo.find((c) => c.material.quantidade < c.necessario);
-      if (faltando) {
-        throw Object.assign(
-          new Error(`Estoque insuficiente de ${faltando.material.nome}: disponível ${faltando.material.quantidade}, necessário ${faltando.necessario}.`),
-          { status: 409 }
-        );
-      }
-
-      for (const { material, necessario } of consumo) {
-        const qtdAnterior = material.quantidade;
-        const qtdResultante = round4(qtdAnterior - necessario);
-        await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
-        await tx.movimentacaoEstoque.create({
-          data: {
-            materialId: material.id, tipo: 'SAIDA_PRODUCAO_PLATAFORMA',
-            quantidadeAnterior: qtdAnterior, quantidadeMovimentada: necessario,
-            quantidadeResultante: qtdResultante,
-            motivo: `Produção pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
-            itemPedidoPlataformaId: item.id,
-          },
-        });
-      }
-
-      return tx.itemPedidoPlataforma.update({ where: { id: item.id }, data: { produzido: true, produzidoEm: new Date() } });
+      return tx.itemPedidoPlataforma.update({
+        where: { id: item.id },
+        data: { produzido: true, produzidoEm: new Date(), produzidoDoEstoque },
+      });
     });
     res.json(resultado);
   } catch (e) {
@@ -204,26 +206,13 @@ router.post('/:itemId/desfazer', async (req, res, next) => {
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (!item.produzido) throw Object.assign(new Error('Este item ainda não foi marcado como produzido.'), { status: 400 });
+      if (item.embalado) throw Object.assign(new Error('Desfaça o "embalado" antes de desfazer o "produzido".'), { status: 400 });
       if (!item.produto) throw Object.assign(new Error('Produto vinculado não encontrado; não é possível desfazer automaticamente.'), { status: 400 });
 
-      for (const fi of item.produto.itensFicha) {
-        const necessario = round4(fi.quantidade * item.quantidade);
-        const material = await tx.material.findUnique({ where: { id: fi.materialId } });
-        const qtdAnterior = material.quantidade;
-        const qtdResultante = round4(qtdAnterior + necessario);
-        await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
-        await tx.movimentacaoEstoque.create({
-          data: {
-            materialId: material.id, tipo: 'ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA',
-            quantidadeAnterior: qtdAnterior, quantidadeMovimentada: necessario,
-            quantidadeResultante: qtdResultante,
-            motivo: `Estorno produção pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
-            itemPedidoPlataformaId: item.id,
-          },
-        });
-      }
+      // Devolve ao estoque de produto (se consumiu de lá) ou estorna os materiais (se descontou material).
+      await desfazerProduzido(tx, item, item.produto);
 
-      return tx.itemPedidoPlataforma.update({ where: { id: item.id }, data: { produzido: false, produzidoEm: null } });
+      return tx.itemPedidoPlataforma.update({ where: { id: item.id }, data: { produzido: false, produzidoEm: null, produzidoDoEstoque: null } });
     });
     res.json(resultado);
   } catch (e) {
@@ -260,6 +249,57 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Etapa "embalado": se o item ainda não foi produzido mas há estoque de produto pronto,
+// o "produzido" é resolvido automaticamente consumindo do estoque (auto-produzido). Se não há
+// estoque, exige que o "produzido" seja marcado antes. Depois de embalado, vai para "Aguardando envio".
+router.post('/:itemId/embalar', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const resultado = await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { pedido: { include: { plataforma: true } }, produto: { include: { itensFicha: { include: { material: true } } } } },
+      });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (item.embalado) throw Object.assign(new Error('Este item já foi marcado como embalado.'), { status: 409 });
+      if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto ao item antes de embalar.'), { status: 400 });
+      if (item.produto.personalizado && !item.fotoImpressa) {
+        throw Object.assign(new Error('Marque a foto como impressa antes de embalar (produto personalizado).'), { status: 400 });
+      }
+
+      const data = { embalado: true, embaladoEm: new Date() };
+
+      // Auto-produzido: se ainda não produzido e há estoque de produto pronto, consome do estoque.
+      if (!item.produzido) {
+        if (item.produto.estoque >= item.quantidade) {
+          const { produzidoDoEstoque } = await marcarProduzido(tx, item, item.produto);
+          data.produzido = true; data.produzidoEm = new Date(); data.produzidoDoEstoque = produzidoDoEstoque;
+        } else {
+          throw Object.assign(new Error('Marque o produto como "produzido" antes de embalar (sem estoque pronto para produzir automaticamente).'), { status: 400 });
+        }
+      }
+
+      return tx.itemPedidoPlataforma.update({ where: { id: itemId }, data });
+    });
+    res.json(resultado);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+router.post('/:itemId/embalar/desfazer', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    if (!item.embalado) return res.status(400).json({ erro: 'Este item ainda não estava marcado como embalado.' });
+    if (item.enviado) return res.status(400).json({ erro: 'Desfaça o "enviado" antes de desfazer o "embalado".' });
+    const atualizado = await prisma.itemPedidoPlataforma.update({ where: { id: itemId }, data: { embalado: false, embaladoEm: null } });
+    res.json(atualizado);
+  } catch (e) { next(e); }
+});
+
 // Etapa final: marca o item como enviado (some das listas de produção/aguardando envio).
 // Aceita `embalagens` (opcional): a embalagem usada é baixada do estoque, vinculada ao pedido.
 router.post('/:itemId/enviar', async (req, res, next) => {
@@ -269,10 +309,7 @@ router.post('/:itemId/enviar', async (req, res, next) => {
       const item = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { produto: true } });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.enviado) throw Object.assign(new Error('Este item já foi marcado como enviado.'), { status: 409 });
-      if (!item.produzido) throw Object.assign(new Error('Marque o produto como feito antes de enviar.'), { status: 400 });
-      if (item.produto && item.produto.personalizado && !item.fotoImpressa) {
-        throw Object.assign(new Error('Marque a foto como impressa antes de enviar (produto personalizado).'), { status: 400 });
-      }
+      if (!item.embalado) throw Object.assign(new Error('Marque o pedido como embalado antes de enviar.'), { status: 400 });
 
       await aplicarEmbalagens(tx, req.body.embalagens, { pedidoId: item.pedidoId });
 
@@ -391,23 +428,10 @@ router.delete('/:itemId', async (req, res, next) => {
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
 
-      // Estorna estoque só se foi descontado por esta produção (produzido e sem envio manual associado).
+      // Estorna só se foi descontado por esta produção (produzido e sem envio manual associado):
+      // devolve ao estoque de produto pronto (se veio de lá) ou estorna os materiais.
       if (item.produzido && !item.envioId && item.produto) {
-        for (const fi of item.produto.itensFicha) {
-          const necessario = round4(fi.quantidade * item.quantidade);
-          const material = await tx.material.findUnique({ where: { id: fi.materialId } });
-          const qtdAnterior = material.quantidade;
-          const qtdResultante = round4(qtdAnterior + necessario);
-          await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
-          await tx.movimentacaoEstoque.create({
-            data: {
-              materialId: material.id, tipo: 'ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA',
-              quantidadeAnterior: qtdAnterior, quantidadeMovimentada: necessario,
-              quantidadeResultante: qtdResultante,
-              motivo: `Estorno por exclusão do pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
-            },
-          });
-        }
+        await desfazerProduzido(tx, item, item.produto);
       }
 
       await tx.itemPedidoPlataforma.delete({ where: { id: itemId } });

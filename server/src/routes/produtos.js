@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { recalcularCustoProduto } = require('../services/custoService');
+const { descontarMateriais } = require('../services/producaoEstoqueService');
 const router = express.Router();
 
 router.get('/', async (req, res, next) => {
@@ -132,6 +133,30 @@ router.patch('/:id/status', async (req, res, next) => {
     const produto = await prisma.produto.update({ where: { id: Number(req.params.id) }, data: { ativo: !!req.body.ativo } });
     res.json(produto);
   } catch (e) { next(e); }
+});
+
+// Produzir para estoque: desconta os materiais da ficha e soma N unidades ao estoque de
+// produto pronto. Bloqueia se faltar material (não deixa negativar).
+router.post('/:id/produzir-estoque', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const quantidade = round4(req.body.quantidade);
+    if (!(quantidade > 0)) return res.status(400).json({ erro: 'Quantidade deve ser maior que zero.' });
+
+    const produto = await prisma.$transaction(async (tx) => {
+      const p = await tx.produto.findUnique({
+        where: { id },
+        include: { itensFicha: { include: { material: true } } },
+      });
+      if (!p) throw Object.assign(new Error('Produto não encontrado.'), { status: 404 });
+      await descontarMateriais(tx, p, quantidade, `Produção para estoque: ${p.nome}`);
+      return tx.produto.update({ where: { id }, data: { estoque: round4(p.estoque + quantidade) } });
+    });
+    res.json(produto);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
 });
 
 // Substituir ficha técnica completa

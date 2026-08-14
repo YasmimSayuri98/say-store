@@ -87,6 +87,7 @@ model Produto {
   descricao           String?
   ativo               Boolean  @default(true)
   personalizado       Boolean  @default(false)  // recebe foto do cliente (impressão personalizada)
+  estoque             Float    @default(0)  // unidades prontas em estoque (produto acabado)
   custoAtualMateriais Float    @default(0)
   custosExtras        Float    @default(0)  // energia, mão de obra, embalagem não rastreada, etc.
   margemLucroAlvo     Float    @default(0)  // margem de lucro alvo (%) para sugerir preço
@@ -335,8 +336,11 @@ model ItemPedidoPlataforma {
   quantidade     Float
   produzido      Boolean   @default(false)
   produzidoEm    DateTime?
+  produzidoDoEstoque Boolean? // true = "produzido" consumiu do estoque de produto pronto; false = descontou material
   fotoImpressa   Boolean   @default(false)  // impressão da foto do cliente concluída (produtos personalizados)
   fotoImpressaEm DateTime?
+  embalado       Boolean   @default(false)  // etapa: pedido embalado (pronto para enviar)
+  embaladoEm     DateTime?
   enviado        Boolean   @default(false)  // etapa final: produto já enviado ao cliente
   enviadoEm      DateTime?
   criadoEm       DateTime  @default(now())
