@@ -6,12 +6,13 @@ import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import SeletorEmbalagens, { linhasEmbalagemPayload } from '../components/SeletorEmbalagens';
 
-function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false }) {
+function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false, sub = null }) {
   return (
     <div className={`card !p-4 relative overflow-hidden ${destaque ? 'ring-1 ring-marca-200' : ''}`}>
       {destaque && <div className="absolute left-0 top-0 bottom-0 w-1 bg-marca-500" />}
       <div className="text-xs font-medium text-grafite-800/60 uppercase tracking-wide">{titulo}</div>
       <div className={`text-2xl font-display font-bold mt-1.5 ${cor}`}>{valor}</div>
+      {sub && <div className="text-xs text-grafite-800/50 mt-1">{sub}</div>}
     </div>
   );
 }
@@ -478,6 +479,12 @@ export default function Dashboard() {
   const itensAProduzir = producao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
   const itensAguardandoEnvio = producao.filter((it) => it.fase === 'AGUARDANDO_ENVIO');
 
+  // Contagem de pedidos a enviar: total pendente, com quebra entre os que precisam produzir e os
+  // que já têm estoque de produto pronto.
+  const totalAEnviar = producao.length;
+  const qtdComEstoque = producao.filter((it) => it.cobertoPorEstoque).length;
+  const qtdAProduzir = producao.filter((it) => !it.cobertoPorEstoque && !it.produzido).length;
+
   return (
     <div>
       <div className="mb-6">
@@ -486,6 +493,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Estatistica titulo="Pedidos a enviar" valor={totalAEnviar} cor="text-marca-600" destaque sub={`${qtdAProduzir} a produzir · ${qtdComEstoque} com estoque`} />
         <Estatistica titulo="Disponível banco Cora" valor={moeda(d.saldoDisponivel)} cor="text-green-700" destaque />
         <Estatistica titulo="Lucro acumulado" valor={moeda(d.lucroAcumulado)} cor="text-marca-600" />
         <Estatistica titulo="Materiais cadastrados" valor={d.materiaisCadastrados} />
