@@ -31,7 +31,7 @@ function rotuloPrazo(prazoEnvio) {
   if (!prazoEnvio) return 'Sem prazo definido';
   // Hoje no fuso de Brasília; prazo pelo seu dia em UTC (correto para pedidos antigos e novos).
   const hoje = new Date(diaISO(new Date(), 'America/Sao_Paulo') + 'T00:00:00');
-  const d = new Date(diaISO(prazoEnvio, 'UTC') + 'T00:00:00');
+  const d = new Date(diaISO(prazoEnvio, 'America/Sao_Paulo') + 'T00:00:00');
   const diffDias = Math.round((d - hoje) / 86400000);
   if (diffDias < 0) return 'Atrasado';
   if (diffDias === 0) return 'Hoje';

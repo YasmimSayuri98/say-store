@@ -27,12 +27,12 @@ export function dataHora(v) {
   return new Date(v).toLocaleString('pt-BR', { timeZone: TZ });
 }
 
-// Campos de "dia puro" (prazo, vencimento): o dia pretendido é a data em UTC do valor
-// guardado — vale tanto para dados antigos (meia-noite UTC) quanto novos (meio-dia UTC).
-// Por isso formatamos em UTC, evitando escorregar de dia.
+// Prazo de envio: lido no fuso de Brasília. Vale para o prazo que vem da Shopee (um horário real,
+// ex.: hoje 23:59 BRT — em UTC já seria o dia seguinte) e para pedidos manuais (guardados ao
+// meio-dia UTC, que em Brasília continua o mesmo dia). Assim o dia bate com o que a Shopee mostra.
 export function dataDia(v) {
   if (!v) return '-';
-  return new Date(v).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+  return new Date(v).toLocaleDateString('pt-BR', { timeZone: TZ });
 }
 
 // Dia (YYYY-MM-DD) de um valor num fuso específico, para comparar prazos.
