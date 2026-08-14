@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { moeda, numero, dataHora, data, dataDia, diaISO } from '../format';
+import { moeda, numero, dataHora, data, diaISO } from '../format';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import SeletorEmbalagens, { linhasEmbalagemPayload } from '../components/SeletorEmbalagens';
@@ -27,16 +27,22 @@ function Atalho({ to, label, icone }) {
   );
 }
 
+// O prazo da Shopee costuma ser o instante-limite (ex.: 15/08 00:00 = "envie até o fim do dia 14/08").
+// Recuamos 1 segundo antes de pegar o dia, pra bater com o dia que a própria Shopee mostra.
+function diaDoPrazo(prazoEnvio) {
+  return diaISO(new Date(new Date(prazoEnvio).getTime() - 1000), 'America/Sao_Paulo');
+}
+
 function rotuloPrazo(prazoEnvio) {
   if (!prazoEnvio) return 'Sem prazo definido';
-  // Hoje no fuso de Brasília; prazo pelo seu dia em UTC (correto para pedidos antigos e novos).
   const hoje = new Date(diaISO(new Date(), 'America/Sao_Paulo') + 'T00:00:00');
-  const d = new Date(diaISO(prazoEnvio, 'America/Sao_Paulo') + 'T00:00:00');
+  const d = new Date(diaDoPrazo(prazoEnvio) + 'T00:00:00');
   const diffDias = Math.round((d - hoje) / 86400000);
   if (diffDias < 0) return 'Atrasado';
   if (diffDias === 0) return 'Hoje';
   if (diffDias === 1) return 'Amanhã';
-  return dataDia(prazoEnvio);
+  const [y, m, dd] = diaDoPrazo(prazoEnvio).split('-');
+  return `${dd}/${m}/${y}`;
 }
 
 function ehAtrasado(prazoEnvio) {
@@ -47,9 +53,10 @@ function ehAtrasado(prazoEnvio) {
 function PrazoPedido({ prazoEnvio }) {
   if (!prazoEnvio) return <span className="text-xs text-grafite-800/40">Sem prazo</span>;
   const atrasado = ehAtrasado(prazoEnvio);
+  const [y, m, dd] = diaDoPrazo(prazoEnvio).split('-');
   return (
     <span className={`text-xs whitespace-nowrap ${atrasado ? 'text-red-600 font-semibold' : 'text-grafite-800/50'}`}>
-      {atrasado ? '⚠️ Atrasado · ' : 'Prazo '}{dataDia(prazoEnvio)}
+      {atrasado ? '⚠️ Atrasado · ' : 'Prazo '}{`${dd}/${m}/${y}`}
     </span>
   );
 }
