@@ -4,6 +4,7 @@ const { round4 } = require('../utils/money');
 const { parseDataDia } = require('../utils/data');
 const { aplicarEmbalagens } = require('../services/embalagemService');
 const { marcarProduzido, desfazerProduzido } = require('../services/producaoEstoqueService');
+const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
 const router = express.Router();
 
 // Calcula, a partir da ficha técnica do produto, se há estoque suficiente para a quantidade pedida.
@@ -300,18 +301,69 @@ router.post('/:itemId/embalar/desfazer', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Etapa final: marca o item como enviado (some das listas de produção/aguardando envio).
-// Aceita `embalagens` (opcional): a embalagem usada é baixada do estoque, vinculada ao pedido.
+// Etapa final: marca o item como enviado (some das listas de produção/aguardando envio) e
+// registra o envio no histórico. O material do produto já foi descontado no "produzido", então
+// aqui NÃO há baixa de estoque de produto — só registro financeiro + baixa da embalagem.
+// Aceita `embalagens` (opcional).
 router.post('/:itemId/enviar', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
     const resultado = await prisma.$transaction(async (tx) => {
-      const item = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { produto: true } });
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { produto: true, pedido: { include: { plataforma: true } } },
+      });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.enviado) throw Object.assign(new Error('Este item já foi marcado como enviado.'), { status: 409 });
       if (!item.embalado) throw Object.assign(new Error('Marque o pedido como embalado antes de enviar.'), { status: 400 });
 
-      await aplicarEmbalagens(tx, req.body.embalagens, { pedidoId: item.pedidoId });
+      const pedido = item.pedido;
+      const qtd = item.quantidade;
+
+      // Registro de envio do pedido: cria no primeiro item enviado; acumula nos demais itens do
+      // mesmo pedido (numeroPedido é único). Assim o pedido aparece no Histórico de envios.
+      let envio = await tx.registroEnvio.findUnique({ where: { numeroPedido: pedido.numeroPedido } });
+      if (!envio) {
+        envio = await tx.registroEnvio.create({
+          data: {
+            dataEnvio: new Date(), numeroPedido: pedido.numeroPedido,
+            plataformaId: pedido.plataformaId, observacao: 'Enviado pela produção',
+          },
+        });
+      }
+
+      // Financeiro do item (preço de venda do produto na plataforma do pedido).
+      let faturamentoItem = 0, taxasItem = 0, custoProdItem = 0;
+      const custoMateriaisItem = round4((item.produto ? item.produto.custoAtualMateriais : 0) * qtd);
+      if (item.produto) {
+        const custoUnit = custoFinalProduto(item.produto);
+        const precoRow = await tx.precoProduto.findFirst({ where: { produtoId: item.produtoId, plataformaId: pedido.plataformaId } });
+        const precoUnit = precoRow ? precoRow.precoVenda : 0;
+        const fin = financeiroUnitario(precoUnit, custoUnit, pedido.plataforma);
+        faturamentoItem = round4(fin.preco * qtd);
+        taxasItem = round4(fin.taxas * qtd);
+        custoProdItem = round4(custoUnit * qtd);
+        await tx.itemRegistroEnvio.create({
+          data: { envioId: envio.id, produtoId: item.produtoId, quantidade: qtd, precoVendaUnitario: precoUnit, custoUnitario: custoUnit },
+        });
+      }
+
+      // Embalagem usada (opcional): baixa do estoque e soma o custo ao envio.
+      const custoEmbalagem = await aplicarEmbalagens(tx, req.body.embalagens, { envioId: envio.id });
+
+      // Acumula os totais no registro de envio.
+      const novoFat = round4(envio.faturamentoBruto + faturamentoItem);
+      const novoTaxas = round4(envio.totalTaxas + taxasItem);
+      const novoCustoProd = round4(envio.custoTotalProdutos + custoProdItem);
+      await tx.registroEnvio.update({
+        where: { id: envio.id },
+        data: {
+          faturamentoBruto: novoFat, totalTaxas: novoTaxas, custoTotalProdutos: novoCustoProd,
+          custoTotalMateriais: round4(envio.custoTotalMateriais + custoMateriaisItem),
+          custoEmbalagem: round4(envio.custoEmbalagem + custoEmbalagem),
+          lucro: round4(novoFat - novoTaxas - novoCustoProd),
+        },
+      });
 
       return tx.itemPedidoPlataforma.update({
         where: { id: itemId }, data: { enviado: true, enviadoEm: new Date() },
