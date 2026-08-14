@@ -56,7 +56,7 @@ export default function Financeiro() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Cartao titulo="Saldo disponível" valor={moeda(r.saldoDisponivel)} cor="text-green-700" sub="Banco Cora" />
         <Cartao titulo="Reserva de lucro" valor={moeda(r.saldoReservaLucro)} cor="text-marca-600" sub="Banco Inter" />
-        <Cartao titulo="Contas a pagar" valor={moeda(r.contasPagar.totalPendente)} cor="text-grafite-900" sub={r.contasPagar.vencidoTotal > 0 ? `${moeda(r.contasPagar.vencidoTotal)} vencido` : 'Em dia'} />
+        <Cartao titulo="Contas a pagar (mês)" valor={moeda(r.contasPagar.mesAtual)} cor="text-grafite-900" sub={r.contasPagar.vencidoTotal > 0 ? `${moeda(r.contasPagar.vencidoTotal)} vencido · ${moeda(r.contasPagar.totalPendente)} no total` : `${moeda(r.contasPagar.totalPendente)} pendente no total`} />
         <Cartao titulo="A vencer em 30 dias" valor={moeda(r.contasPagar.aVencer30)} cor="text-amber-600" />
       </div>
 
