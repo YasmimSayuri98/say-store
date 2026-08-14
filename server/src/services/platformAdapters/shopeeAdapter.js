@@ -113,6 +113,50 @@ async function detalharPedidosBrutos(cfg, orderSnList) {
   });
 }
 
+// Lista todos os produtos/SKUs ativos da loja, no formato { sku, nome }. Percorre os itens,
+// busca o nome de cada um e, quando o item tem variações (models), pega o SKU de cada variação.
+async function buscarProdutos(cfg) {
+  const itemIds = [];
+  let offset = 0;
+  let hasNext = true;
+  while (hasNext) {
+    const resp = await chamar('/api/v2/product/get_item_list', {
+      cfg,
+      query: { offset, page_size: 100, item_status: 'NORMAL' },
+    });
+    const items = (resp.response && resp.response.item) || [];
+    for (const it of items) itemIds.push(it.item_id);
+    hasNext = !!(resp.response && resp.response.has_next_page);
+    if (resp.response && resp.response.next_offset != null) offset = resp.response.next_offset;
+    else offset += items.length;
+    if (items.length === 0) break;
+  }
+
+  const produtos = [];
+  for (let i = 0; i < itemIds.length; i += 50) {
+    const bloco = itemIds.slice(i, i + 50);
+    if (bloco.length === 0) continue;
+    const resp = await chamar('/api/v2/product/get_item_base_info', { cfg, query: { item_id_list: bloco.join(',') } });
+    const lista = (resp.response && resp.response.item_list) || [];
+    for (const item of lista) {
+      if (item.has_model) {
+        const mr = await chamar('/api/v2/product/get_model_list', { cfg, query: { item_id: item.item_id } });
+        const models = (mr.response && mr.response.model) || [];
+        for (const m of models) {
+          if (m.model_sku) produtos.push({ sku: String(m.model_sku).trim(), nome: item.item_name });
+        }
+      } else if (item.item_sku) {
+        produtos.push({ sku: String(item.item_sku).trim(), nome: item.item_name });
+      }
+    }
+  }
+
+  // Deduplica por SKU (a mesma variação pode aparecer mais de uma vez).
+  const porSku = new Map();
+  for (const p of produtos) if (p.sku && !porSku.has(p.sku)) porSku.set(p.sku, p);
+  return [...porSku.values()];
+}
+
 // Busca pedidos no formato normalizado usado pelo plataformaSyncService, independente do canal.
 async function buscarPedidos(cfg, { desde }) {
   const agora = new Date();
@@ -157,4 +201,4 @@ async function buscarPedidos(cfg, { desde }) {
   return pedidosNormalizados;
 }
 
-module.exports = { tipo: 'SHOPEE', renovarToken, buscarPedidos, linkAutorizacao, trocarCodigoPorToken };
+module.exports = { tipo: 'SHOPEE', renovarToken, buscarPedidos, buscarProdutos, linkAutorizacao, trocarCodigoPorToken };

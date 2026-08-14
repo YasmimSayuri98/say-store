@@ -54,7 +54,7 @@ export default function Produtos() {
   }
   useEffect(() => { carregar(); }, [busca]);
 
-  function novo() { setEditando({ nome: '', sku: '', descricao: '', personalizado: false }); setModalAberto(true); }
+  function novo() { setEditando({ nome: '', sku: '', descricao: '', personalizado: false, producaoEstendida: false }); setModalAberto(true); }
   function editar(p) { setEditando({ ...p }); setModalAberto(true); }
 
   async function duplicar(p) {
@@ -96,7 +96,8 @@ export default function Produtos() {
               <tr key={p.id} className={!p.ativo ? 'opacity-50' : ''}>
                 <td className="td font-medium">
                   {p.nome}{!p.ativo && <span className="text-xs text-grafite-800/40"> (inativo)</span>}
-                  {p.personalizado && <span className="badge badge-baixo ml-2">Personalizado</span>}
+                  {p.personalizado && <span className="badge badge-baixo ml-2">📸 Foto do pedido</span>}
+                  {p.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
                 </td>
                 <td className="td">{p.sku}</td>
                 <td className="td text-right tabular-nums font-medium">{numero(p.estoque)} un</td>
@@ -123,7 +124,11 @@ export default function Produtos() {
             <div><label className="label">Descrição</label><textarea className="input" rows={2} value={editando.descricao || ''} onChange={(e) => setEditando({ ...editando, descricao: e.target.value })} /></div>
             <label className="flex items-center gap-2 text-sm text-grafite-800/70">
               <input type="checkbox" checked={!!editando.personalizado} onChange={(e) => setEditando({ ...editando, personalizado: e.target.checked })} />
-              Produto personalizado (recebe foto do cliente para impressão)
+              Foto do pedido (recebe foto do cliente para impressão)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-grafite-800/70">
+              <input type="checkbox" checked={!!editando.producaoEstendida} onChange={(e) => setEditando({ ...editando, producaoEstendida: e.target.checked })} />
+              Produção estendida (leva mais tempo — o “personalizado” da Shopee, com prazo de envio maior)
             </label>
           </div>
           <div className="flex justify-end gap-2 mt-4">

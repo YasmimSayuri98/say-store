@@ -21,6 +21,7 @@ export default function IntegracaoPlataforma() {
   const [linkGerado, setLinkGerado] = useState('');
   const [urlRetorno, setUrlRetorno] = useState('');
   const [conectando, setConectando] = useState(false);
+  const [importando, setImportando] = useState(false);
   const toast = useToast();
 
   async function carregar() {
@@ -83,6 +84,16 @@ export default function IntegracaoPlataforma() {
       carregar();
     } catch (e) { toast.erro(e.message); }
     setConectando(false);
+  }
+
+  async function importarProdutos() {
+    setImportando(true);
+    try {
+      const r = await api.post(`/plataformas/${id}/integracao/importar-produtos`, {});
+      const semSku = r.semSku ? ` ${r.semSku} sem SKU (ignorados).` : '';
+      toast.sucesso(`Importação: ${r.criados} produto(s) criado(s), ${r.existentes} já existia(m) de ${r.total} SKU(s).${semSku}`);
+    } catch (e) { toast.erro(e.message); }
+    setImportando(false);
   }
 
   async function sincronizar() {
@@ -173,6 +184,22 @@ export default function IntegracaoPlataforma() {
           <div className="flex justify-end">
             <button className="btn btn-primary" onClick={conectar} disabled={conectando}>
               {conectando ? 'Conectando...' : 'Conectar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cfg.configurado && (
+        <div className="card max-w-xl space-y-3 mt-5">
+          <h2 className="font-display font-bold text-grafite-900">Importar produtos da loja</h2>
+          <p className="text-xs text-grafite-800/50">
+            Traz os SKUs dos seus anúncios e cria automaticamente um produto no catálogo para cada SKU
+            que ainda não existe (você ajusta ficha técnica, preço e prazo depois). Não altera produtos
+            já cadastrados. Precisa que o app tenha permissão de <b>Produtos</b> na autorização.
+          </p>
+          <div className="flex justify-end">
+            <button className="btn btn-secondary" onClick={importarProdutos} disabled={importando}>
+              {importando ? 'Importando...' : 'Importar produtos / SKUs'}
             </button>
           </div>
         </div>

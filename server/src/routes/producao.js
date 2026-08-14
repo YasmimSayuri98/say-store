@@ -85,6 +85,7 @@ router.get('/', async (req, res, next) => {
         estoqueProduto: it.produto ? it.produto.estoque : 0,
         cobertoPorEstoque,
         personalizado,
+        producaoEstendida: !!(it.produto && it.produto.producaoEstendida),
         fotoImpressa: it.fotoImpressa,
         produzido: it.produzido,
         produzidoDoEstoque: it.produzidoDoEstoque,

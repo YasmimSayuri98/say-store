@@ -108,6 +108,7 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onEmbalar, onNovoPedi
                         <div className="flex flex-col gap-1">
                           <span className={it.semVinculo ? 'text-grafite-800/40 italic' : 'font-medium'}>
                             {it.semVinculo ? it.nomePlataforma : it.produtoNome} × {numero(it.quantidade)}
+                            {it.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
                           </span>
                           {it.observacao && (
                             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>

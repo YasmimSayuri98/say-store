@@ -115,13 +115,16 @@ router.put('/:id/integracao', async (req, res, next) => {
     const existente = await prisma.integracaoPlataforma.findUnique({ where: { plataformaId } });
     if (!existente && !tipo) return res.status(400).json({ erro: 'Selecione o tipo de integração (Shopee ou TikTok Shop).' });
 
+    // Remove espaços acidentais das credenciais (ex.: Partner ID colado com espaço vira "+2041600"
+    // na assinatura e a Shopee recusa). Só grava campos enviados não-vazios.
+    const limpar = (v) => (v == null ? v : String(v).trim());
     const data = {};
     if (tipo) data.tipo = tipo;
-    if (appId !== undefined && appId !== '') data.appId = appId;
-    if (appSecret) data.appSecret = appSecret;
-    if (lojaId !== undefined && lojaId !== '') data.lojaId = lojaId;
-    if (accessToken) data.accessToken = accessToken;
-    if (refreshToken) data.refreshToken = refreshToken;
+    if (appId !== undefined && limpar(appId) !== '') data.appId = limpar(appId);
+    if (limpar(appSecret)) data.appSecret = limpar(appSecret);
+    if (lojaId !== undefined && limpar(lojaId) !== '') data.lojaId = limpar(lojaId);
+    if (limpar(accessToken)) data.accessToken = limpar(accessToken);
+    if (limpar(refreshToken)) data.refreshToken = limpar(refreshToken);
     if (ativo !== undefined) data.ativo = !!ativo;
 
     const cfg = await prisma.integracaoPlataforma.upsert({
@@ -167,6 +170,37 @@ router.post('/:id/integracao/trocar-codigo', async (req, res, next) => {
     }
     const atualizado = await adapter.trocarCodigoPorToken(cfg, { code, shopId });
     res.json({ ok: true, lojaId: atualizado.lojaId });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+// Importa os produtos/SKUs da loja: cria automaticamente um produto no catálogo para cada SKU
+// que ainda não existe (nome e SKU vindos da plataforma). Exige a loja conectada.
+router.post('/:id/integracao/importar-produtos', async (req, res, next) => {
+  try {
+    const plataformaId = Number(req.params.id);
+    const cfg = await prisma.integracaoPlataforma.findUnique({ where: { plataformaId } });
+    if (!cfg || !cfg.accessToken) return res.status(400).json({ erro: 'Conecte a loja antes de importar os produtos.' });
+    const adapter = ADAPTERS[cfg.tipo];
+    if (!adapter || !adapter.buscarProdutos) {
+      return res.status(400).json({ erro: 'Importação de produtos ainda não disponível para este tipo de integração.' });
+    }
+
+    const produtos = await adapter.buscarProdutos(cfg);
+    let criados = 0, existentes = 0, semSku = 0;
+    const novos = [];
+    for (const p of produtos) {
+      const sku = p.sku ? String(p.sku).trim() : '';
+      if (!sku) { semSku += 1; continue; }
+      const existe = await prisma.produto.findUnique({ where: { sku } });
+      if (existe) { existentes += 1; continue; }
+      await prisma.produto.create({ data: { nome: (p.nome && p.nome.trim()) || sku, sku } });
+      criados += 1;
+      novos.push(sku);
+    }
+    res.json({ total: produtos.length, criados, existentes, semSku, novos });
   } catch (e) {
     if (e.status) return res.status(e.status).json({ erro: e.message });
     next(e);

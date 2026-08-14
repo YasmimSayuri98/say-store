@@ -86,7 +86,8 @@ model Produto {
   sku                 String   @unique
   descricao           String?
   ativo               Boolean  @default(true)
-  personalizado       Boolean  @default(false)  // recebe foto do cliente (impressão personalizada)
+  personalizado       Boolean  @default(false)  // "Foto do pedido": recebe foto do cliente para impressão
+  producaoEstendida   Boolean  @default(false)  // produção mais demorada (o "personalizado" da Shopee = prazo maior)
   estoque             Float    @default(0)  // unidades prontas em estoque (produto acabado)
   custoAtualMateriais Float    @default(0)
   custosExtras        Float    @default(0)  // energia, mão de obra, embalagem não rastreada, etc.
