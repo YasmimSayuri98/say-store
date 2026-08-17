@@ -90,7 +90,7 @@ function chkCls(ativo) {
   return `flex items-center gap-1.5 text-xs ${ativo ? 'cursor-pointer text-grafite-800/70' : 'text-grafite-800/40'}`;
 }
 
-function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onEmbalar, onNovoPedido, onEditar, onExcluir }) {
+function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -128,20 +128,29 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onEmbalar, onNovoPedi
                                 Foto impressa
                               </label>
                             )}
-                            <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && !(it.personalizado && !it.fotoImpressa) && it.estoqueSuficiente)}>
+                            <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
                               <input
                                 type="checkbox"
                                 checked={it.produzido || it.cobertoPorEstoque}
-                                disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || (it.personalizado && !it.fotoImpressa) || !it.estoqueSuficiente}
+                                disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
                                 onChange={() => onProduzir(it)}
                               />
                               {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
                             </label>
-                            <label className={chkCls(!it.embalado && !it.semVinculo && !(it.personalizado && !it.fotoImpressa) && (it.produzido || it.cobertoPorEstoque))}>
+                            <label className={chkCls(!it.finalizado && !it.semVinculo && (it.produzido || it.cobertoPorEstoque) && (!it.personalizado || it.fotoImpressa))}>
+                              <input
+                                type="checkbox"
+                                checked={it.finalizado}
+                                disabled={it.finalizado || it.semVinculo || !(it.produzido || it.cobertoPorEstoque) || (it.personalizado && !it.fotoImpressa)}
+                                onChange={() => onFinalizar(it)}
+                              />
+                              Finalizado
+                            </label>
+                            <label className={chkCls(!it.embalado && !it.semVinculo && it.finalizado)}>
                               <input
                                 type="checkbox"
                                 checked={it.embalado}
-                                disabled={it.embalado || it.semVinculo || (it.personalizado && !it.fotoImpressa) || (!it.produzido && !it.cobertoPorEstoque)}
+                                disabled={it.embalado || it.semVinculo || !it.finalizado}
                                 onChange={() => onEmbalar(it)}
                               />
                               Embalado
@@ -441,6 +450,14 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  async function finalizar(item) {
+    try {
+      await api.post(`/producao/${item.id}/finalizar`, {});
+      toast.sucesso(`${item.produtoNome} finalizado.`);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
   async function embalar(item) {
     try {
       await api.post(`/producao/${item.id}/embalar`, {});
@@ -512,7 +529,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={setEnviandoItem} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">

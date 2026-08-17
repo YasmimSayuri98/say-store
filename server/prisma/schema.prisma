@@ -338,6 +338,8 @@ model ItemPedidoPlataforma {
   produzido      Boolean   @default(false)
   produzidoEm    DateTime?
   produzidoDoEstoque Boolean? // true = "produzido" consumiu do estoque de produto pronto; false = descontou material
+  finalizado     Boolean   @default(false)  // etapa: acabamento/finalização concluída (entre produzido e embalado)
+  finalizadoEm   DateTime?
   fotoImpressa   Boolean   @default(false)  // impressão da foto do cliente concluída (produtos personalizados)
   fotoImpressaEm DateTime?
   embalado       Boolean   @default(false)  // etapa: pedido embalado (pronto para enviar)

@@ -89,6 +89,7 @@ router.get('/', async (req, res, next) => {
         fotoImpressa: it.fotoImpressa,
         produzido: it.produzido,
         produzidoDoEstoque: it.produzidoDoEstoque,
+        finalizado: it.finalizado,
         embalado: it.embalado,
         // Só aparece em "Aguardando envio" quando embalado. Antes disso está em produção.
         fase: it.embalado ? 'AGUARDANDO_ENVIO' : 'PRODUCAO',
@@ -165,7 +166,6 @@ router.post('/:itemId/produzir', async (req, res, next) => {
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.produzido) throw Object.assign(new Error('Este item já foi marcado como produzido.'), { status: 409 });
       if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto do catálogo a este item antes de marcar como produzido.'), { status: 400 });
-      if (item.produto.personalizado && !item.fotoImpressa) throw Object.assign(new Error('Marque a foto como impressa antes de produzir (produto personalizado).'), { status: 400 });
 
       // Já existe um envio manual registrado para este número de pedido cobrindo este mesmo
       // produto? Então o estoque já foi descontado por lá — só marca o ciclo completo, sem
@@ -251,10 +251,10 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Etapa "embalado": se o item ainda não foi produzido mas há estoque de produto pronto,
-// o "produzido" é resolvido automaticamente consumindo do estoque (auto-produzido). Se não há
-// estoque, exige que o "produzido" seja marcado antes. Depois de embalado, vai para "Aguardando envio".
-router.post('/:itemId/embalar', async (req, res, next) => {
+// Etapa "finalizado" (acabamento), entre produzido e embalado. Se o item ainda não foi produzido
+// mas há estoque de produto pronto, o "produzido" é resolvido automaticamente consumindo do
+// estoque (auto-produzido). Se não há estoque, exige que o "produzido" seja marcado antes.
+router.post('/:itemId/finalizar', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
     const resultado = await prisma.$transaction(async (tx) => {
@@ -263,13 +263,13 @@ router.post('/:itemId/embalar', async (req, res, next) => {
         include: { pedido: { include: { plataforma: true } }, produto: { include: { itensFicha: { include: { material: true } } } } },
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
-      if (item.embalado) throw Object.assign(new Error('Este item já foi marcado como embalado.'), { status: 409 });
-      if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto ao item antes de embalar.'), { status: 400 });
+      if (item.finalizado) throw Object.assign(new Error('Este item já foi marcado como finalizado.'), { status: 409 });
+      if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto ao item antes de finalizar.'), { status: 400 });
       if (item.produto.personalizado && !item.fotoImpressa) {
-        throw Object.assign(new Error('Marque a foto como impressa antes de embalar (produto personalizado).'), { status: 400 });
+        throw Object.assign(new Error('Marque a foto como impressa antes de finalizar (produto personalizado).'), { status: 400 });
       }
 
-      const data = { embalado: true, embaladoEm: new Date() };
+      const data = { finalizado: true, finalizadoEm: new Date() };
 
       // Auto-produzido: se ainda não produzido e há estoque de produto pronto, consome do estoque.
       if (!item.produzido) {
@@ -277,7 +277,7 @@ router.post('/:itemId/embalar', async (req, res, next) => {
           const { produzidoDoEstoque } = await marcarProduzido(tx, item, item.produto);
           data.produzido = true; data.produzidoEm = new Date(); data.produzidoDoEstoque = produzidoDoEstoque;
         } else {
-          throw Object.assign(new Error('Marque o produto como "produzido" antes de embalar (sem estoque pronto para produzir automaticamente).'), { status: 400 });
+          throw Object.assign(new Error('Marque o produto como "produzido" antes de finalizar (sem estoque pronto para produzir automaticamente).'), { status: 400 });
         }
       }
 
@@ -288,6 +288,33 @@ router.post('/:itemId/embalar', async (req, res, next) => {
     if (e.status) return res.status(e.status).json({ erro: e.message });
     next(e);
   }
+});
+
+router.post('/:itemId/finalizar/desfazer', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    if (!item.finalizado) return res.status(400).json({ erro: 'Este item ainda não estava marcado como finalizado.' });
+    if (item.embalado) return res.status(400).json({ erro: 'Desfaça o "embalado" antes de desfazer o "finalizado".' });
+    const atualizado = await prisma.itemPedidoPlataforma.update({ where: { id: itemId }, data: { finalizado: false, finalizadoEm: null } });
+    res.json(atualizado);
+  } catch (e) { next(e); }
+});
+
+// Etapa "embalado" (depois de finalizado). Depois de embalado, vai para "Aguardando envio".
+router.post('/:itemId/embalar', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    if (item.embalado) return res.status(409).json({ erro: 'Este item já foi marcado como embalado.' });
+    if (!item.finalizado) return res.status(400).json({ erro: 'Marque como "finalizado" antes de embalar.' });
+    const atualizado = await prisma.itemPedidoPlataforma.update({
+      where: { id: itemId }, data: { embalado: true, embaladoEm: new Date() },
+    });
+    res.json(atualizado);
+  } catch (e) { next(e); }
 });
 
 router.post('/:itemId/embalar/desfazer', async (req, res, next) => {
