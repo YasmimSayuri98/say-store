@@ -44,6 +44,8 @@ export default function Envios() {
   async function confirmar() {
     try {
       const validos = itensValidos();
+      const embs = linhasEmbalagemPayload(embalagens);
+      if (embs.length === 0) return toast.erro('Selecione a embalagem usada no envio.');
       await api.post('/envios', {
         itens: validos, plataformaId: plataformaId || undefined, dataEnvio: dataEnvio || undefined,
         observacao: observacao || undefined, numeroPedido: numeroPedido || undefined,

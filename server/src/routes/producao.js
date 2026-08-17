@@ -345,6 +345,10 @@ router.post('/:itemId/enviar', async (req, res, next) => {
       if (item.enviado) throw Object.assign(new Error('Este item já foi marcado como enviado.'), { status: 409 });
       if (!item.embalado) throw Object.assign(new Error('Marque o pedido como embalado antes de enviar.'), { status: 400 });
 
+      // Embalagem é obrigatória no envio.
+      const embsValidas = (Array.isArray(req.body.embalagens) ? req.body.embalagens : []).filter((e) => e && e.embalagemId && Number(e.quantidade) > 0);
+      if (embsValidas.length === 0) throw Object.assign(new Error('Selecione a embalagem usada no envio.'), { status: 400 });
+
       const pedido = item.pedido;
       const qtd = item.quantidade;
 

@@ -182,6 +182,8 @@ router.post('/', async (req, res, next) => {
   try {
     const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
     if (itens.length === 0) return res.status(400).json({ erro: 'Informe ao menos um produto.' });
+    const embsValidas = (Array.isArray(req.body.embalagens) ? req.body.embalagens : []).filter((e) => e && e.embalagemId && Number(e.quantidade) > 0);
+    if (embsValidas.length === 0) return res.status(400).json({ erro: 'Selecione a embalagem usada no envio.' });
 
     const resultado = await prisma.$transaction(async (tx) => {
       const { numeroPedido, pedidoPlataforma } = await validarNumeroPedido(tx, req.body.numeroPedido);

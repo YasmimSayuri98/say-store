@@ -17,9 +17,9 @@ export default function SeletorEmbalagens({ linhas, setLinhas }) {
 
   return (
     <div>
-      <label className="label">Embalagem usada (opcional — baixa do estoque)</label>
+      <label className="label">Embalagem usada * (baixa do estoque)</label>
       {opcoes.length === 0 ? (
-        <p className="text-xs text-grafite-800/50">Nenhum tipo de embalagem cadastrado. Cadastre em “Embalagens” para poder registrar aqui.</p>
+        <p className="text-xs text-red-600">Nenhum tipo de embalagem cadastrado. Cadastre em “Embalagens” antes de enviar (a embalagem é obrigatória).</p>
       ) : (
         <>
           <div className="space-y-2">

@@ -400,9 +400,11 @@ function ModalEnviar({ item, onClose, onEnviado }) {
   const toast = useToast();
 
   async function confirmar() {
+    const embs = linhasEmbalagemPayload(embalagens);
+    if (embs.length === 0) return toast.erro('Selecione a embalagem usada no envio.');
     setSalvando(true);
     try {
-      await api.post(`/producao/${item.id}/enviar`, { embalagens: linhasEmbalagemPayload(embalagens) });
+      await api.post(`/producao/${item.id}/enviar`, { embalagens: embs });
       toast.sucesso(`${item.produtoNome} marcado como enviado.`);
       onEnviado(item);
     } catch (e) { toast.erro(e.message); }
