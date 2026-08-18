@@ -4,6 +4,7 @@ import { api } from '../api';
 import { moeda, numero } from '../format';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import BotaoIcone, { ICONES } from '../components/BotaoIcone';
 
 // Modal para produzir unidades e lançar no estoque de produto pronto.
 function ModalProduzirEstoque({ produto, onClose, onFeito }) {
@@ -112,12 +113,14 @@ export default function Produtos() {
                 <td className="td text-right tabular-nums font-medium">{numero(p.estoque)} un</td>
                 <td className="td">{moeda(p.custoAtualMateriais)}</td>
                 <td className="td whitespace-nowrap">
-                  <Link to={'/produtos/' + p.id} className="btn btn-primary btn-sm mr-1">Ficha / Custo</Link>
-                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => setProduzindo(p)}>Produzir</button>
-                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(p)}>Editar</button>
-                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => duplicar(p)}>Duplicar</button>
-                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => alternarStatus(p)}>{p.ativo ? 'Inativar' : 'Ativar'}</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => excluir(p)}>Excluir</button>
+                  <div className="flex items-center gap-0.5">
+                    <BotaoIcone to={'/produtos/' + p.id} titulo="Ficha técnica / Custo" icone={ICONES.ficha} cor="primary" />
+                    <BotaoIcone titulo="Produzir para estoque" icone={ICONES.produzir} onClick={() => setProduzindo(p)} />
+                    <BotaoIcone titulo="Editar" icone={ICONES.editar} onClick={() => editar(p)} />
+                    <BotaoIcone titulo="Duplicar" icone={ICONES.duplicar} onClick={() => duplicar(p)} />
+                    <BotaoIcone titulo={p.ativo ? 'Inativar' : 'Ativar'} icone={ICONES.toggle} onClick={() => alternarStatus(p)} />
+                    <BotaoIcone titulo="Excluir" icone={ICONES.excluir} cor="danger" onClick={() => excluir(p)} />
+                  </div>
                 </td>
               </tr>
             ))}

@@ -3,6 +3,7 @@ import { api } from '../api';
 import { moeda, moeda4, numero, situacaoBadge } from '../format';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import BotaoIcone, { ICONES } from '../components/BotaoIcone';
 
 export default function Materiais() {
   const [materiais, setMateriais] = useState([]);
@@ -89,9 +90,11 @@ export default function Materiais() {
                   <td className="td">{moeda4(m.custoMedio)}</td>
                   <td className="td"><span className={`badge ${s.cls}`}>{s.texto}</span></td>
                   <td className="td whitespace-nowrap">
-                    <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(m)}>Editar</button>
-                    <button className="btn btn-secondary btn-sm mr-1" onClick={() => alternarStatus(m)}>{m.ativo ? 'Inativar' : 'Ativar'}</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => excluir(m)}>Excluir</button>
+                    <div className="flex items-center gap-0.5">
+                      <BotaoIcone titulo="Editar" icone={ICONES.editar} onClick={() => editar(m)} />
+                      <BotaoIcone titulo={m.ativo ? 'Inativar' : 'Ativar'} icone={ICONES.toggle} onClick={() => alternarStatus(m)} />
+                      <BotaoIcone titulo="Excluir" icone={ICONES.excluir} cor="danger" onClick={() => excluir(m)} />
+                    </div>
                   </td>
                 </tr>
               );

@@ -12,6 +12,7 @@ export default function ContasPagar() {
   const [nova, setNova] = useState({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
   const [pagar, setPagar] = useState(null); // { parcela, contaFinanceiraId, dataPagamento }
   const [expandidas, setExpandidas] = useState({}); // contaId -> mostra parcelas futuras
+  const [editando, setEditando] = useState(null); // conta em edição (dados, não parcelas)
   const toast = useToast();
 
   async function carregar() {
@@ -58,6 +59,21 @@ export default function ContasPagar() {
   async function excluir(conta) {
     try { await api.del('/contas-pagar/' + conta.id); toast.sucesso('Conta excluída.'); carregar(); }
     catch (e) { toast.erro(e.message); }
+  }
+
+  function editarConta(c) {
+    setEditando({ id: c.id, descricao: c.descricao, categoria: c.categoria || '', formaPagamento: c.formaPagamento || '', observacao: c.observacao || '' });
+  }
+  async function salvarEdicao() {
+    try {
+      if (!editando.descricao.trim()) return toast.erro('Informe a descrição.');
+      await api.put('/contas-pagar/' + editando.id, {
+        descricao: editando.descricao, categoria: editando.categoria || undefined,
+        formaPagamento: editando.formaPagamento || undefined, observacao: editando.observacao || undefined,
+      });
+      toast.sucesso('Conta atualizada.');
+      setEditando(null); carregar();
+    } catch (e) { toast.erro(e.message); }
   }
 
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -141,9 +157,10 @@ export default function ContasPagar() {
                   </tbody>
                 </table>
               </div>
-              {pagas === 0 && (
-                <div className="flex justify-end mt-2"><button className="btn btn-ghost btn-sm text-red-600" onClick={() => excluir(c)}>Excluir conta</button></div>
-              )}
+              <div className="flex justify-end gap-3 mt-2">
+                <button className="btn btn-ghost btn-sm text-grafite-800/60" onClick={() => editarConta(c)}>Editar</button>
+                {pagas === 0 && <button className="btn btn-ghost btn-sm text-red-600" onClick={() => excluir(c)}>Excluir conta</button>}
+              </div>
             </div>
           );
         })}
@@ -171,6 +188,24 @@ export default function ContasPagar() {
           <div className="flex justify-end gap-2 mt-4">
             <button className="btn btn-secondary" onClick={() => setNovaAberto(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={criar}>Cadastrar</button>
+          </div>
+        </Modal>
+      )}
+
+      {editando && (
+        <Modal titulo="Editar conta" onClose={() => setEditando(null)}>
+          <div className="space-y-3">
+            <div><label className="label">Descrição *</label><input className="input" value={editando.descricao} onChange={(e) => setEditando({ ...editando, descricao: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Categoria</label><input className="input" value={editando.categoria} onChange={(e) => setEditando({ ...editando, categoria: e.target.value })} placeholder="Opcional" /></div>
+              <div><label className="label">Cartão / Boleto</label><input className="input" value={editando.formaPagamento} onChange={(e) => setEditando({ ...editando, formaPagamento: e.target.value })} placeholder="Ex.: Cartão Nubank" /></div>
+            </div>
+            <div><label className="label">Observação</label><input className="input" value={editando.observacao} onChange={(e) => setEditando({ ...editando, observacao: e.target.value })} placeholder="Opcional" /></div>
+            <p className="text-xs text-grafite-800/50">Para mudar o valor ou o número de parcelas, exclua a conta e cadastre de novo.</p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <button className="btn btn-secondary" onClick={() => setEditando(null)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={salvarEdicao}>Salvar</button>
           </div>
         </Modal>
       )}

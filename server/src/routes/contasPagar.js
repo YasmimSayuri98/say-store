@@ -94,6 +94,28 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// Editar os dados da conta (não mexe nas parcelas/valor — para isso, exclua e recadastre).
+router.put('/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const b = req.body;
+    if (!b.descricao || !b.descricao.trim()) return res.status(400).json({ erro: 'Descrição é obrigatória.' });
+    const existente = await prisma.contaPagar.findUnique({ where: { id } });
+    if (!existente) return res.status(404).json({ erro: 'Conta não encontrada.' });
+    const conta = await prisma.contaPagar.update({
+      where: { id },
+      data: {
+        descricao: b.descricao.trim(),
+        categoria: b.categoria && b.categoria.trim() ? b.categoria.trim() : null,
+        formaPagamento: b.formaPagamento && b.formaPagamento.trim() ? b.formaPagamento.trim() : null,
+        observacao: b.observacao && b.observacao.trim() ? b.observacao.trim() : null,
+      },
+      include: { parcelas: { include: { contaFinanceira: true }, orderBy: { numero: 'asc' } } },
+    });
+    res.json(conta);
+  } catch (e) { next(e); }
+});
+
 // Baixa (pagamento) de uma parcela: debita a conta financeira escolhida.
 router.post('/parcelas/:id/pagar', async (req, res, next) => {
   try {
