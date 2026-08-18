@@ -80,6 +80,15 @@ export default function Produtos() {
     catch (e) { toast.erro(e.message); }
   }
 
+  async function excluir(p) {
+    if (!window.confirm(`Excluir o produto "${p.nome}"? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await api.del('/produtos/' + p.id);
+      toast.sucesso('Produto excluído.');
+      setProdutos((lista) => lista.filter((x) => x.id !== p.id));
+    } catch (e) { toast.erro(e.message); }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -107,7 +116,8 @@ export default function Produtos() {
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => setProduzindo(p)}>Produzir</button>
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(p)}>Editar</button>
                   <button className="btn btn-secondary btn-sm mr-1" onClick={() => duplicar(p)}>Duplicar</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => alternarStatus(p)}>{p.ativo ? 'Inativar' : 'Ativar'}</button>
+                  <button className="btn btn-secondary btn-sm mr-1" onClick={() => alternarStatus(p)}>{p.ativo ? 'Inativar' : 'Ativar'}</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => excluir(p)}>Excluir</button>
                 </td>
               </tr>
             ))}

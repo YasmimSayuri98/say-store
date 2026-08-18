@@ -79,6 +79,7 @@ router.post('/', async (req, res, next) => {
       data: {
         descricao: b.descricao.trim(),
         categoria: b.categoria || null,
+        formaPagamento: b.formaPagamento && b.formaPagamento.trim() ? b.formaPagamento.trim() : null,
         valorTotal,
         numeroParcelas: parcelas.length,
         observacao: b.observacao || null,

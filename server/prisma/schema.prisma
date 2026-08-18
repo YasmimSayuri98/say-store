@@ -259,6 +259,7 @@ model ContaPagar {
   id             Int      @id @default(autoincrement())
   descricao      String
   categoria      String?
+  formaPagamento String?  // em qual cartão/boleto a compra foi parcelada
   valorTotal     Float
   numeroParcelas Int      @default(1)
   observacao     String?

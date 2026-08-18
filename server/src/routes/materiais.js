@@ -137,6 +137,9 @@ router.delete('/:id', async (req, res, next) => {
     if (movs > 0) return res.status(409).json({ erro: 'Material possui movimentações. Apenas inativação é permitida.' });
     const fichas = await prisma.itemFichaTecnica.count({ where: { materialId: id } });
     if (fichas > 0) return res.status(409).json({ erro: 'Material está em fichas técnicas. Apenas inativação é permitida.' });
+    const embalagens = await prisma.itemEmbalagem.count({ where: { materialId: id } });
+    if (embalagens > 0) return res.status(409).json({ erro: 'Material está em embalagens cadastradas. Apenas inativação é permitida.' });
+    await prisma.entradaEstoque.deleteMany({ where: { materialId: id } });
     await prisma.filamentoDetalhe.deleteMany({ where: { materialId: id } });
     await prisma.material.delete({ where: { id } });
     res.status(204).end();

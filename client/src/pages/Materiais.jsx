@@ -44,6 +44,15 @@ export default function Materiais() {
     catch (e) { toast.erro(e.message); }
   }
 
+  async function excluir(m) {
+    if (!window.confirm(`Excluir o material "${m.nome}"? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await api.del('/materiais/' + m.id);
+      toast.sucesso('Material excluído.');
+      setMateriais((lista) => lista.filter((x) => x.id !== m.id));
+    } catch (e) { toast.erro(e.message); }
+  }
+
   const catFilamento = categorias.find((c) => c.nome === 'Filamento');
   const ehFilamento = editando && String(editando.categoriaId) === String(catFilamento?.id);
 
@@ -81,7 +90,8 @@ export default function Materiais() {
                   <td className="td"><span className={`badge ${s.cls}`}>{s.texto}</span></td>
                   <td className="td whitespace-nowrap">
                     <button className="btn btn-secondary btn-sm mr-1" onClick={() => editar(m)}>Editar</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => alternarStatus(m)}>{m.ativo ? 'Inativar' : 'Ativar'}</button>
+                    <button className="btn btn-secondary btn-sm mr-1" onClick={() => alternarStatus(m)}>{m.ativo ? 'Inativar' : 'Ativar'}</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => excluir(m)}>Excluir</button>
                   </td>
                 </tr>
               );
@@ -144,9 +154,10 @@ export default function Materiais() {
                   </div>
                   <div><label className="label">Marca</label><input className="input" value={editando.filamento?.marca || ''} onChange={(e) => setEditando({ ...editando, filamento: { ...editando.filamento, marca: e.target.value } })} /></div>
                   <div><label className="label">Cor</label><input className="input" value={editando.filamento?.cor || ''} onChange={(e) => setEditando({ ...editando, filamento: { ...editando.filamento, cor: e.target.value } })} /></div>
-                  <div><label className="label">Peso original do rolo (g)</label><input type="number" className="input" value={editando.filamento?.pesoOriginalRolo || ''} onChange={(e) => setEditando({ ...editando, filamento: { ...editando.filamento, pesoOriginalRolo: e.target.value } })} /></div>
-                  <div><label className="label">Peso disponível (g)</label><input type="number" className="input" value={editando.filamento?.pesoDisponivel || ''} onChange={(e) => setEditando({ ...editando, filamento: { ...editando.filamento, pesoDisponivel: e.target.value } })} /></div>
                 </div>
+                <p className="text-xs text-grafite-800/50 mt-2">
+                  💡 O peso do filamento é o próprio <b>estoque</b> (em gramas) — use a unidade <b>Grama (g)</b> acima e informe o peso em <b>{editando.id ? 'entradas/ajustes' : '"Quantidade inicial"'}</b>. Não precisa preencher pesos separados.
+                </p>
               </div>
             )}
           </div>

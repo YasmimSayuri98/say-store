@@ -9,7 +9,7 @@ export default function ContasPagar() {
   const [contasFin, setContasFin] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
   const [novaAberto, setNovaAberto] = useState(false);
-  const [nova, setNova] = useState({ descricao: '', categoria: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
+  const [nova, setNova] = useState({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
   const [pagar, setPagar] = useState(null); // { parcela, contaFinanceiraId, dataPagamento }
   const [expandidas, setExpandidas] = useState({}); // contaId -> mostra parcelas futuras
   const toast = useToast();
@@ -28,13 +28,14 @@ export default function ContasPagar() {
     try {
       await api.post('/contas-pagar', {
         descricao: nova.descricao, categoria: nova.categoria || undefined,
+        formaPagamento: nova.formaPagamento || undefined,
         valorTotal: Number(nova.valorTotal) || 0,
         numeroParcelas: nParc, primeiroVencimento: nova.primeiroVencimento,
         observacao: nova.observacao || undefined,
       });
       toast.sucesso('Conta cadastrada.');
       setNovaAberto(false);
-      setNova({ descricao: '', categoria: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
+      setNova({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
       carregar();
     } catch (e) { toast.erro(e.message); }
   }
@@ -99,6 +100,7 @@ export default function ContasPagar() {
                   <div className="text-xs text-grafite-800/50">
                     {c.categoria ? c.categoria + ' · ' : ''}{moeda(c.valorTotal)}{c.numeroParcelas > 1 ? ` em ${c.numeroParcelas}x` : ''} · {pagas}/{c.numeroParcelas} pagas
                   </div>
+                  {c.formaPagamento && <div className="text-xs text-marca-600 font-medium mt-0.5">💳 {c.formaPagamento}</div>}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-grafite-800/50">Restante</div>
@@ -156,6 +158,7 @@ export default function ContasPagar() {
               <div><label className="label">Categoria</label><input className="input" value={nova.categoria} onChange={(e) => setNova({ ...nova, categoria: e.target.value })} placeholder="Opcional" /></div>
               <div><label className="label">Valor total (R$) *</label><input type="number" step="0.01" className="input" value={nova.valorTotal} onChange={(e) => setNova({ ...nova, valorTotal: e.target.value })} /></div>
             </div>
+            <div><label className="label">Cartão / Boleto</label><input className="input" value={nova.formaPagamento} onChange={(e) => setNova({ ...nova, formaPagamento: e.target.value })} placeholder="Ex.: Cartão Nubank, Boleto, Cartão Inter" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Nº de parcelas</label><input type="number" min="1" className="input" value={nova.numeroParcelas} onChange={(e) => setNova({ ...nova, numeroParcelas: e.target.value })} /></div>
               <div><label className="label">1º vencimento *</label><input type="date" className="input" value={nova.primeiroVencimento} onChange={(e) => setNova({ ...nova, primeiroVencimento: e.target.value })} /></div>
