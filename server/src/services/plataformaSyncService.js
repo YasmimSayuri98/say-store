@@ -1,4 +1,5 @@
 const prisma = require('../prisma');
+const { normalizarPrazoLimite } = require('../utils/data');
 const shopeeAdapter = require('./platformAdapters/shopeeAdapter');
 const tiktokAdapter = require('./platformAdapters/tiktokAdapter');
 
@@ -34,14 +35,16 @@ async function sincronizarPlataforma(plataformaId) {
 
   for (const p of pedidosBrutos) {
     if (!p.numeroPedido) continue;
+    // Normaliza o prazo para o dia-limite (o dia que a plataforma mostra), à prova de fuso/cache.
+    const prazo = normalizarPrazoLimite(p.prazoEnvio);
     const existiaPedido = await prisma.pedidoPlataforma.findUnique({ where: { numeroPedido: p.numeroPedido } });
     const pedido = await prisma.pedidoPlataforma.upsert({
       where: { numeroPedido: p.numeroPedido },
       create: {
         plataformaId, numeroPedido: p.numeroPedido, status: p.status,
-        prazoEnvio: p.prazoEnvio, dataPedido: p.dataPedido,
+        prazoEnvio: prazo, dataPedido: p.dataPedido,
       },
-      update: { status: p.status, prazoEnvio: p.prazoEnvio },
+      update: { status: p.status, prazoEnvio: prazo },
     });
     if (!existiaPedido) pedidosNovos++;
 

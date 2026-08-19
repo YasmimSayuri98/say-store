@@ -11,4 +11,15 @@ function parseDataDia(v) {
   return new Date(s);
 }
 
-module.exports = { parseDataDia };
+// Normaliza o prazo de envio da plataforma (ship_by_date) para o DIA-limite, ancorado ao meio-dia
+// UTC. O instante-limite costuma ser 23:59 do dia (ou 00:00 do dia seguinte); recuamos 1 segundo e
+// pegamos o dia no fuso de Brasília, gravando ao meio-dia UTC. Assim o dia exibido bate com o que a
+// plataforma mostra — em qualquer fuso e independente da versão do site (à prova de cache).
+function normalizarPrazoLimite(prazo) {
+  if (!prazo) return null;
+  const menos1s = new Date(new Date(prazo).getTime() - 1000);
+  const diaBR = menos1s.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+  return new Date(`${diaBR}T12:00:00.000Z`);
+}
+
+module.exports = { parseDataDia, normalizarPrazoLimite };
