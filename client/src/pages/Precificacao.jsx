@@ -48,6 +48,7 @@ export default function Precificacao() {
   const [produtos, setProdutos] = useState([]);
   const [temPlataformas, setTemPlataformas] = useState(true);
   const [salvandoId, setSalvandoId] = useState(null);
+  const [busca, setBusca] = useState('');
   const toast = useToast();
 
   async function carregar() {
@@ -123,8 +124,20 @@ export default function Precificacao() {
         Você pode aceitar o sugerido ou digitar o seu preço — o lucro é recalculado na hora.
       </p>
 
+      <input
+        className="input max-w-xs mb-5"
+        placeholder="Buscar produto por nome ou SKU…"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+      />
+
       <div className="space-y-5">
-        {produtos.map((p) => {
+        {produtos
+          .filter((p) => {
+            const q = busca.trim().toLowerCase();
+            return !q || p.nome.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q);
+          })
+          .map((p) => {
           const custoFinal = custoFinalDe(p);
           return (
             <div key={p.produtoId} className="card">
@@ -208,6 +221,9 @@ export default function Precificacao() {
           );
         })}
         {produtos.length === 0 && <div className="card text-grafite-800/40">Nenhum produto ativo. Cadastre produtos primeiro.</div>}
+        {produtos.length > 0 && busca.trim() && produtos.filter((p) => { const q = busca.trim().toLowerCase(); return p.nome.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q); }).length === 0 && (
+          <div className="card text-grafite-800/40">Nenhum produto encontrado para “{busca}”.</div>
+        )}
       </div>
     </div>
   );
