@@ -2,7 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { recalcularCustoProduto } = require('../services/custoService');
-const { descontarMateriais } = require('../services/producaoEstoqueService');
+const { descontarMateriais, estornarMateriais } = require('../services/producaoEstoqueService');
 const router = express.Router();
 
 router.get('/', async (req, res, next) => {
@@ -153,6 +153,36 @@ router.post('/:id/produzir-estoque', async (req, res, next) => {
       if (!p) throw Object.assign(new Error('Produto não encontrado.'), { status: 404 });
       await descontarMateriais(tx, p, quantidade, `Produção para estoque: ${p.nome}`);
       return tx.produto.update({ where: { id }, data: { estoque: round4(p.estoque + quantidade) } });
+    });
+    res.json(produto);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+// Remover unidades do estoque de produto pronto (ex.: produção lançada por engano). Se
+// `devolverMaterial` (padrão true), estorna os materiais da ficha de volta ao estoque.
+router.post('/:id/remover-estoque', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const quantidade = round4(req.body.quantidade);
+    const devolverMaterial = req.body.devolverMaterial !== false;
+    if (!(quantidade > 0)) return res.status(400).json({ erro: 'Quantidade deve ser maior que zero.' });
+
+    const produto = await prisma.$transaction(async (tx) => {
+      const p = await tx.produto.findUnique({
+        where: { id },
+        include: { itensFicha: { include: { material: true } } },
+      });
+      if (!p) throw Object.assign(new Error('Produto não encontrado.'), { status: 404 });
+      if (p.estoque < quantidade) {
+        throw Object.assign(new Error(`Não há tanto estoque para remover: há ${p.estoque} un em estoque.`), { status: 409 });
+      }
+      if (devolverMaterial && p.itensFicha.length > 0) {
+        await estornarMateriais(tx, p, quantidade, `Estorno de produção para estoque: ${p.nome}`);
+      }
+      return tx.produto.update({ where: { id }, data: { estoque: round4(p.estoque - quantidade) } });
     });
     res.json(produto);
   } catch (e) {

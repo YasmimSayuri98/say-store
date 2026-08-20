@@ -6,13 +6,14 @@ import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import BotaoIcone, { ICONES } from '../components/BotaoIcone';
 
-// Modal para produzir unidades e lançar no estoque de produto pronto.
+// Modal para ajustar o estoque de produto pronto: produzir (+) ou remover (−).
 function ModalProduzirEstoque({ produto, onClose, onFeito }) {
   const [quantidade, setQuantidade] = useState('');
+  const [devolverMaterial, setDevolverMaterial] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
 
-  async function salvar() {
+  async function produzir() {
     if (!(Number(quantidade) > 0)) return toast.erro('Informe a quantidade a produzir.');
     setSalvando(true);
     try {
@@ -23,19 +24,36 @@ function ModalProduzirEstoque({ produto, onClose, onFeito }) {
     setSalvando(false);
   }
 
+  async function remover() {
+    if (!(Number(quantidade) > 0)) return toast.erro('Informe a quantidade a remover.');
+    setSalvando(true);
+    try {
+      await api.post(`/produtos/${produto.id}/remover-estoque`, { quantidade: Number(quantidade), devolverMaterial });
+      toast.sucesso(`${quantidade} un removidas do estoque${devolverMaterial ? ' (material devolvido)' : ''}.`);
+      onFeito();
+    } catch (e) { toast.erro(e.message); }
+    setSalvando(false);
+  }
+
   return (
-    <Modal titulo={`Produzir para estoque · ${produto.nome}`} onClose={onClose}>
+    <Modal titulo={`Estoque de produto pronto · ${produto.nome}`} onClose={onClose}>
       <p className="text-sm text-grafite-800/70 mb-3">
-        Estoque atual: <span className="font-medium">{numero(produto.estoque)} un</span>. Ao produzir, o material da
-        ficha técnica é descontado e as unidades entram no estoque de produto pronto.
+        Estoque atual: <span className="font-medium">{numero(produto.estoque)} un</span>.
       </p>
       <div>
-        <label className="label">Quantidade a produzir *</label>
+        <label className="label">Quantidade *</label>
         <input type="number" min="1" step="1" className="input" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} autoFocus />
       </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Produzindo...' : 'Produzir'}</button>
+      <label className="flex items-center gap-2 text-sm text-grafite-800/70 mt-3">
+        <input type="checkbox" checked={devolverMaterial} onChange={(e) => setDevolverMaterial(e.target.checked)} />
+        Ao remover, devolver o material ao estoque (use quando lançou por engano)
+      </label>
+      <div className="flex justify-between items-center gap-2 mt-4">
+        <button className="btn btn-danger" onClick={remover} disabled={salvando}>{salvando ? '...' : '− Remover do estoque'}</button>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={produzir} disabled={salvando}>{salvando ? '...' : '+ Produzir'}</button>
+        </div>
       </div>
     </Modal>
   );
