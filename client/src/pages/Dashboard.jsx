@@ -72,6 +72,17 @@ function agruparPorPrazo(itens) {
   return grupos;
 }
 
+// Agrupa itens pelo pedido (mesmo número de pedido = mesmo bloco).
+function agruparPorPedido(itens) {
+  const grupos = new Map();
+  for (const it of itens) {
+    const k = it.pedidoId != null ? 'ped' + it.pedidoId : 'item' + it.id;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(it);
+  }
+  return grupos;
+}
+
 function AcoesLinha({ onEditar, onExcluir }) {
   return (
     <div className="flex items-center gap-1 justify-end">
@@ -108,79 +119,87 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
           {[...grupos.entries()].map(([rotulo, lista]) => (
             <div key={rotulo}>
               <div className={`text-xs font-semibold uppercase tracking-wide mb-1.5 ${rotulo === 'Atrasado' ? 'text-red-600' : 'text-grafite-800/50'}`}>{rotulo}</div>
-              <table className="w-full">
-                <tbody>
-                  {lista.map((it) => (
-                    <tr key={it.id}>
-                      <td className="td">
-                        <div className="flex flex-col gap-1">
-                          <span className={it.semVinculo ? 'text-grafite-800/40 italic' : 'font-medium'}>
-                            {it.semVinculo ? it.nomePlataforma : it.produtoNome} × {numero(it.quantidade)}
-                            {it.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
-                          </span>
-                          {it.observacao && (
-                            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>
-                          )}
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {it.personalizado && (
-                              <label className={chkCls(!it.fotoImpressa && !it.semVinculo)}>
-                                <input type="checkbox" checked={it.fotoImpressa} disabled={it.fotoImpressa} onChange={() => onMarcarFoto(it)} />
-                                Foto impressa
+              <div className="space-y-2">
+                {[...agruparPorPedido(lista).values()].map((itensPedido) => {
+                  const cab = itensPedido[0];
+                  return (
+                    <div key={cab.pedidoId ?? cab.id} className="rounded-lg border border-grafite-900/10 overflow-hidden">
+                      {/* Cabeçalho do pedido (mostrado uma vez) */}
+                      <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-base-100 border-b border-grafite-900/5">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="badge badge-baixo">{cab.plataformaNome}</span>
+                          <span className="text-xs text-grafite-800/50 truncate">{cab.numeroPedido}</span>
+                          {itensPedido.length > 1 && <span className="text-[10px] text-grafite-800/40">· {itensPedido.length} itens</span>}
+                        </div>
+                        <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                      </div>
+                      {cab.observacao && (
+                        <div className="px-3 pt-2">
+                          <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 inline-block max-w-full whitespace-pre-wrap">📝 {cab.observacao}</span>
+                        </div>
+                      )}
+                      {/* Itens do pedido */}
+                      {itensPedido.map((it) => (
+                        <div key={it.id} className="flex items-start justify-between gap-3 px-3 py-2 border-b last:border-b-0 border-grafite-900/5">
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <span className={it.semVinculo ? 'text-grafite-800/40 italic' : 'font-medium'}>
+                              {it.semVinculo ? it.nomePlataforma : it.produtoNome} × {numero(it.quantidade)}
+                              {it.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
+                            </span>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {it.personalizado && (
+                                <label className={chkCls(!it.fotoImpressa && !it.semVinculo)}>
+                                  <input type="checkbox" checked={it.fotoImpressa} disabled={it.fotoImpressa} onChange={() => onMarcarFoto(it)} />
+                                  Foto impressa
+                                </label>
+                              )}
+                              <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
+                                <input
+                                  type="checkbox"
+                                  checked={it.produzido || it.cobertoPorEstoque}
+                                  disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
+                                  onChange={() => onProduzir(it)}
+                                />
+                                {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
                               </label>
+                              <label className={chkCls(!it.finalizado && !it.semVinculo && (it.produzido || it.cobertoPorEstoque) && (!it.personalizado || it.fotoImpressa))}>
+                                <input
+                                  type="checkbox"
+                                  checked={it.finalizado}
+                                  disabled={it.finalizado || it.semVinculo || !(it.produzido || it.cobertoPorEstoque) || (it.personalizado && !it.fotoImpressa)}
+                                  onChange={() => onFinalizar(it)}
+                                />
+                                Finalizado
+                              </label>
+                              <label className={chkCls(!it.embalado && !it.semVinculo && it.finalizado)}>
+                                <input
+                                  type="checkbox"
+                                  checked={it.embalado}
+                                  disabled={it.embalado || it.semVinculo || !it.finalizado}
+                                  onChange={() => onEmbalar(it)}
+                                />
+                                Embalado
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {it.semVinculo ? (
+                              <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
+                            ) : it.cobertoPorEstoque ? (
+                              <span className="badge badge-normal" title={`${numero(it.estoqueProduto)} em estoque`}>✓ Tem estoque</span>
+                            ) : !it.estoqueSuficiente ? (
+                              <span className="badge badge-sem">Faltam materiais</span>
+                            ) : (
+                              <span className="badge badge-baixo">Produzir</span>
                             )}
-                            <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
-                              <input
-                                type="checkbox"
-                                checked={it.produzido || it.cobertoPorEstoque}
-                                disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
-                                onChange={() => onProduzir(it)}
-                              />
-                              {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
-                            </label>
-                            <label className={chkCls(!it.finalizado && !it.semVinculo && (it.produzido || it.cobertoPorEstoque) && (!it.personalizado || it.fotoImpressa))}>
-                              <input
-                                type="checkbox"
-                                checked={it.finalizado}
-                                disabled={it.finalizado || it.semVinculo || !(it.produzido || it.cobertoPorEstoque) || (it.personalizado && !it.fotoImpressa)}
-                                onChange={() => onFinalizar(it)}
-                              />
-                              Finalizado
-                            </label>
-                            <label className={chkCls(!it.embalado && !it.semVinculo && it.finalizado)}>
-                              <input
-                                type="checkbox"
-                                checked={it.embalado}
-                                disabled={it.embalado || it.semVinculo || !it.finalizado}
-                                onChange={() => onEmbalar(it)}
-                              />
-                              Embalado
-                            </label>
+                            <AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} />
                           </div>
                         </div>
-                      </td>
-                      <td className="td text-xs whitespace-nowrap">
-                        <span className="badge badge-baixo">{it.plataformaNome}</span>
-                      </td>
-                      <td className="td text-xs whitespace-nowrap">
-                        <div className="text-grafite-800/50">{it.numeroPedido}</div>
-                        <PrazoPedido prazoEnvio={it.prazoEnvio} />
-                      </td>
-                      <td className="td text-right whitespace-nowrap">
-                        {it.semVinculo ? (
-                          <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
-                        ) : it.cobertoPorEstoque ? (
-                          <span className="badge badge-normal" title={`${numero(it.estoqueProduto)} em estoque`}>✓ Tem estoque</span>
-                        ) : !it.estoqueSuficiente ? (
-                          <span className="badge badge-sem">Faltam materiais</span>
-                        ) : (
-                          <span className="badge badge-baixo">Produzir</span>
-                        )}
-                      </td>
-                      <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -201,29 +220,37 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
           {[...grupos.entries()].map(([rotulo, lista]) => (
             <div key={rotulo}>
               <div className={`text-xs font-semibold uppercase tracking-wide mb-1.5 ${rotulo === 'Atrasado' ? 'text-red-600' : 'text-grafite-800/50'}`}>{rotulo}</div>
-              <table className="w-full">
-                <tbody>
-                  {lista.map((it) => (
-                    <tr key={it.id}>
-                      <td className="td">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={false} onChange={() => onEnviar(it)} />
-                          <span className="font-medium">{it.produtoNome} × {numero(it.quantidade)}</span>
-                        </label>
-                        {it.observacao && (
-                          <span className="mt-1 block text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 w-fit max-w-xs whitespace-pre-wrap">📝 {it.observacao}</span>
-                        )}
-                      </td>
-                      <td className="td text-xs whitespace-nowrap"><span className="badge badge-baixo">{it.plataformaNome}</span></td>
-                      <td className="td text-xs whitespace-nowrap">
-                        <div className="text-grafite-800/50">{it.numeroPedido}</div>
-                        <PrazoPedido prazoEnvio={it.prazoEnvio} />
-                      </td>
-                      <td className="td w-px"><AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="space-y-2">
+                {[...agruparPorPedido(lista).values()].map((itensPedido) => {
+                  const cab = itensPedido[0];
+                  return (
+                    <div key={cab.pedidoId ?? cab.id} className="rounded-lg border border-grafite-900/10 overflow-hidden">
+                      <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-base-100 border-b border-grafite-900/5">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="badge badge-baixo">{cab.plataformaNome}</span>
+                          <span className="text-xs text-grafite-800/50 truncate">{cab.numeroPedido}</span>
+                          {itensPedido.length > 1 && <span className="text-[10px] text-grafite-800/40">· {itensPedido.length} itens</span>}
+                        </div>
+                        <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                      </div>
+                      {cab.observacao && (
+                        <div className="px-3 pt-2">
+                          <span className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 inline-block max-w-full whitespace-pre-wrap">📝 {cab.observacao}</span>
+                        </div>
+                      )}
+                      {itensPedido.map((it) => (
+                        <div key={it.id} className="flex items-center justify-between gap-3 px-3 py-2 border-b last:border-b-0 border-grafite-900/5">
+                          <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                            <input type="checkbox" checked={false} onChange={() => onEnviar(it)} />
+                            <span className="font-medium truncate">{it.produtoNome} × {numero(it.quantidade)}</span>
+                          </label>
+                          <AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
