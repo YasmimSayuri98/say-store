@@ -1,0 +1,5 @@
+CREATE TABLE "Nota" (
+    "id" INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+    "texto" TEXT NOT NULL DEFAULT '',
+    "atualizadoEm" DATETIME NOT NULL
+);

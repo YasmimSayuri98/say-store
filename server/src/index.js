@@ -34,6 +34,7 @@ app.use('/api/contas-pagar', require('./routes/contasPagar'));
 app.use('/api/financeiro', require('./routes/financeiro'));
 app.use('/api/producao', require('./routes/producao'));
 app.use('/api/embalagens', require('./routes/embalagens'));
+app.use('/api/notas', require('./routes/notas'));
 
 // Handler de erros
 app.use((err, req, res, next) => {

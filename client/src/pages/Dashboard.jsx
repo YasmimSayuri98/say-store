@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { moeda, numero, dataHora, data, diaISO } from '../format';
@@ -13,6 +13,46 @@ function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false
       <div className="text-xs font-medium text-grafite-800/60 uppercase tracking-wide">{titulo}</div>
       <div className={`text-2xl font-display font-bold mt-1.5 ${cor}`}>{valor}</div>
       {sub && <div className="text-xs text-grafite-800/50 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+// Bloco de notas/afazeres com salvamento automático.
+function NotasCard() {
+  const [texto, setTexto] = useState('');
+  const [status, setStatus] = useState(''); // '' | 'salvando' | 'salvo'
+  const [carregado, setCarregado] = useState(false);
+  const timer = useRef(null);
+
+  useEffect(() => {
+    api.get('/notas').then((n) => { setTexto(n.texto || ''); setCarregado(true); }).catch(() => setCarregado(true));
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, []);
+
+  function onChange(e) {
+    const v = e.target.value;
+    setTexto(v);
+    setStatus('salvando');
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      try { await api.put('/notas', { texto: v }); setStatus('salvo'); }
+      catch { setStatus(''); }
+    }, 700);
+  }
+
+  return (
+    <div className="card lg:col-span-2">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-display font-bold text-grafite-900">📝 Notas / Afazeres</h2>
+        <span className="text-xs text-grafite-800/40">{status === 'salvando' ? 'Salvando…' : status === 'salvo' ? 'Salvo ✓' : ''}</span>
+      </div>
+      <textarea
+        className="input min-h-[110px] resize-y"
+        placeholder="Anote seus afazeres aqui… (salva sozinho)"
+        value={texto}
+        onChange={onChange}
+        disabled={!carregado}
+      />
     </div>
   );
 }
@@ -558,6 +598,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
+        <NotasCard />
         <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={setEnviandoItem} onEditar={setPedidoEditando} onExcluir={excluir} />
 

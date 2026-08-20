@@ -284,6 +284,13 @@ model ParcelaConta {
   contaFinanceira ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
 }
 
+// Bloco de notas/afazeres do Dashboard (registro único).
+model Nota {
+  id           Int      @id @default(1)
+  texto        String   @default("")
+  atualizadoEm DateTime @updatedAt
+}
+
 model ConfiguracaoFinanceira {
   id                       Int      @id @default(1)
   percentualLucroPadrao    Float    @default(0)
