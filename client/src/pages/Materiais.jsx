@@ -56,6 +56,7 @@ export default function Materiais() {
 
   const catFilamento = categorias.find((c) => c.nome === 'Filamento');
   const ehFilamento = editando && String(editando.categoriaId) === String(catFilamento?.id);
+  const unidadeSel = editando && unidades.find((u) => String(u.id) === String(editando.unidadeId));
 
   return (
     <div>
@@ -141,6 +142,13 @@ export default function Materiais() {
               <label className="label">Quantidade mínima para alerta</label>
               <input type="number" className="input" value={editando.quantidadeMinima} onChange={(e) => setEditando({ ...editando, quantidadeMinima: e.target.value })} />
             </div>
+            {editando.id && (
+              <div>
+                <label className="label">Custo médio (R$ por {unidadeSel?.sigla || 'un'})</label>
+                <input type="number" step="0.0001" className="input" value={editando.custoMedio ?? 0} onChange={(e) => setEditando({ ...editando, custoMedio: e.target.value })} />
+                <p className="text-xs text-grafite-800/50 mt-1">Preço por {unidadeSel?.sigla || 'unidade'}. Ao mudar, os produtos que usam este material são recalculados.</p>
+              </div>
+            )}
             <div className="md:col-span-2">
               <label className="label">Observações</label>
               <textarea className="input" rows={2} value={editando.observacoes || ''} onChange={(e) => setEditando({ ...editando, observacoes: e.target.value })} />

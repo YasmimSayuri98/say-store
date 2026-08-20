@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { situacaoEstoque } = require('../services/estoqueService');
+const { recalcularProdutosPorMaterial } = require('../services/custoService');
 const { round4 } = require('../utils/money');
 const router = express.Router();
 
@@ -91,7 +92,12 @@ router.put('/:id', async (req, res, next) => {
     const existente = await prisma.material.findUnique({ where: { id }, include: { filamento: true } });
     if (!existente) return res.status(404).json({ erro: 'Material não encontrado.' });
 
-    const material = await prisma.material.update({
+    // Permite corrigir o custo médio manualmente (ex.: filamentos importados sem preço). Se mudar,
+    // os produtos que usam este material são recalculados.
+    const mudouCusto = b.custoMedio != null && b.custoMedio !== '' && round4(b.custoMedio) !== existente.custoMedio;
+
+    const material = await prisma.$transaction(async (tx) => {
+      const atualizado = await tx.material.update({
       where: { id },
       data: {
         nome: b.nome.trim(),
@@ -99,7 +105,8 @@ router.put('/:id', async (req, res, next) => {
         unidadeId: Number(b.unidadeId),
         quantidadeMinima: round4(b.quantidadeMinima || 0),
         observacoes: b.observacoes || null,
-        // quantidade e custoMedio não são editados aqui: usar entrada/ajuste.
+        ...(mudouCusto ? { custoMedio: round4(b.custoMedio) } : {}),
+        // quantidade não é editada aqui: usar entrada/ajuste.
         filamento: b.filamento
           ? existente.filamento
             ? { update: {
@@ -115,6 +122,9 @@ router.put('/:id', async (req, res, next) => {
           : undefined,
       },
       include: { categoria: true, unidade: true, filamento: true },
+      });
+      if (mudouCusto) await recalcularProdutosPorMaterial(tx, id);
+      return atualizado;
     });
     res.json(comSituacao(material));
   } catch (e) { next(e); }
