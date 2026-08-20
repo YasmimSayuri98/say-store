@@ -17,6 +17,15 @@ function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false
   );
 }
 
+// Título de bloco com destaque (fonte grande + barrinha da marca).
+function TituloBloco({ children, className = '' }) {
+  return (
+    <h2 className={`text-2xl font-display font-extrabold text-grafite-900 flex items-center gap-2 ${className}`}>
+      <span className="inline-block w-1.5 h-6 rounded-full bg-marca-500 shrink-0" />{children}
+    </h2>
+  );
+}
+
 // Lista de afazeres do Dashboard (checklist): adicionar, marcar feito, editar e excluir.
 function NotasCard() {
   const [tarefas, setTarefas] = useState([]);
@@ -67,7 +76,7 @@ function NotasCard() {
   return (
     <div className="card lg:col-span-2">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display font-bold text-grafite-900">📝 Notas / Afazeres</h2>
+        <TituloBloco>📝 Notas / Afazeres</TituloBloco>
         {pendentes > 0 && <span className="text-xs text-grafite-800/40">{pendentes} pendente{pendentes > 1 ? 's' : ''}</span>}
       </div>
 
@@ -210,9 +219,7 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
   return (
     <div className="card lg:col-span-2">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-display font-extrabold text-grafite-900 flex items-center gap-2">
-          <span className="inline-block w-1.5 h-6 rounded-full bg-marca-500" />Pedidos
-        </h2>
+        <TituloBloco>Pedidos</TituloBloco>
         <div className="flex items-center gap-3">
           <button className="text-xs font-semibold text-marca-600 hover:text-marca-700" onClick={onNovoPedido}>+ Pedido manual</button>
           <Link to="/plataformas" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Configurar →</Link>
@@ -318,7 +325,7 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
-      <h2 className="font-display font-bold text-grafite-900 mb-4">Aguardando envio</h2>
+      <TituloBloco className="mb-4">Aguardando envio</TituloBloco>
       {itens.length === 0 ? (
         <p className="text-sm text-grafite-800/40 py-4 text-center">Nada aguardando envio.</p>
       ) : (
@@ -670,7 +677,7 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-grafite-900">Materiais mais urgentes</h2>
+            <TituloBloco>Materiais mais urgentes</TituloBloco>
             <Link to="/lista-compras" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Ver lista →</Link>
           </div>
           {d.urgentes.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhum material urgente.</p> : (
@@ -689,7 +696,7 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <h2 className="font-display font-bold text-grafite-900 mb-4">Últimas movimentações</h2>
+          <TituloBloco className="mb-4">Últimas movimentações</TituloBloco>
           {d.ultimasMovimentacoes.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhuma movimentação.</p> : (
             <table className="w-full">
               <tbody>
@@ -708,7 +715,7 @@ export default function Dashboard() {
 
         <div className="card lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-grafite-900">Últimos envios</h2>
+            <TituloBloco>Últimos envios</TituloBloco>
             <Link to="/historico-envios" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Ver histórico →</Link>
           </div>
           {d.ultimosEnvios.length === 0 ? <p className="text-sm text-grafite-800/40 py-4 text-center">Nenhum envio registrado.</p> : (
