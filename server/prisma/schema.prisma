@@ -291,6 +291,14 @@ model Nota {
   atualizadoEm DateTime @updatedAt
 }
 
+// Afazeres do Dashboard em formato de checklist.
+model Tarefa {
+  id       Int      @id @default(autoincrement())
+  texto    String
+  feito    Boolean  @default(false)
+  criadoEm DateTime @default(now())
+}
+
 model ConfiguracaoFinanceira {
   id                       Int      @id @default(1)
   percentualLucroPadrao    Float    @default(0)

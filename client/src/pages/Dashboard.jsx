@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { moeda, numero, dataHora, data, diaISO } from '../format';
@@ -17,42 +17,106 @@ function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false
   );
 }
 
-// Bloco de notas/afazeres com salvamento automático.
+// Lista de afazeres do Dashboard (checklist): adicionar, marcar feito, editar e excluir.
 function NotasCard() {
-  const [texto, setTexto] = useState('');
-  const [status, setStatus] = useState(''); // '' | 'salvando' | 'salvo'
-  const [carregado, setCarregado] = useState(false);
-  const timer = useRef(null);
+  const [tarefas, setTarefas] = useState([]);
+  const [novo, setNovo] = useState('');
+  const [editId, setEditId] = useState(null);
+  const [editTexto, setEditTexto] = useState('');
+  const toast = useToast();
 
-  useEffect(() => {
-    api.get('/notas').then((n) => { setTexto(n.texto || ''); setCarregado(true); }).catch(() => setCarregado(true));
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, []);
+  function carregar() { api.get('/tarefas').then(setTarefas).catch(() => {}); }
+  useEffect(() => { carregar(); }, []);
 
-  function onChange(e) {
-    const v = e.target.value;
-    setTexto(v);
-    setStatus('salvando');
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      try { await api.put('/notas', { texto: v }); setStatus('salvo'); }
-      catch { setStatus(''); }
-    }, 700);
+  async function adicionar() {
+    const texto = novo.trim();
+    if (!texto) return;
+    try {
+      const t = await api.post('/tarefas', { texto });
+      setTarefas((l) => [...l, t]);
+      setNovo('');
+    } catch (e) { toast.erro(e.message); }
   }
+
+  async function alternar(t) {
+    try {
+      const at = await api.put(`/tarefas/${t.id}`, { feito: !t.feito });
+      setTarefas((l) => l.map((x) => (x.id === t.id ? at : x)));
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function salvarEdicao(t) {
+    const texto = editTexto.trim();
+    if (!texto) { setEditId(null); return; }
+    try {
+      const at = await api.put(`/tarefas/${t.id}`, { texto });
+      setTarefas((l) => l.map((x) => (x.id === t.id ? at : x)));
+      setEditId(null);
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function excluir(t) {
+    try {
+      await api.del(`/tarefas/${t.id}`);
+      setTarefas((l) => l.filter((x) => x.id !== t.id));
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  const pendentes = tarefas.filter((t) => !t.feito).length;
 
   return (
     <div className="card lg:col-span-2">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-bold text-grafite-900">📝 Notas / Afazeres</h2>
-        <span className="text-xs text-grafite-800/40">{status === 'salvando' ? 'Salvando…' : status === 'salvo' ? 'Salvo ✓' : ''}</span>
+        {pendentes > 0 && <span className="text-xs text-grafite-800/40">{pendentes} pendente{pendentes > 1 ? 's' : ''}</span>}
       </div>
-      <textarea
-        className="input min-h-[110px] resize-y"
-        placeholder="Anote seus afazeres aqui… (salva sozinho)"
-        value={texto}
-        onChange={onChange}
-        disabled={!carregado}
-      />
+
+      <div className="flex gap-2 mb-3">
+        <input
+          className="input flex-1"
+          placeholder="Novo afazer… (Enter para adicionar)"
+          value={novo}
+          onChange={(e) => setNovo(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') adicionar(); }}
+        />
+        <button className="btn btn-primary" onClick={adicionar}>+ Adicionar</button>
+      </div>
+
+      {tarefas.length === 0 ? (
+        <p className="text-sm text-grafite-800/40 py-2 text-center">Nenhum afazer. Adicione um acima. 👆</p>
+      ) : (
+        <ul className="space-y-1">
+          {tarefas.map((t) => (
+            <li key={t.id} className="flex items-center gap-2 group">
+              <input type="checkbox" checked={t.feito} onChange={() => alternar(t)} className="shrink-0" />
+              {editId === t.id ? (
+                <input
+                  className="input flex-1 !py-1"
+                  value={editTexto}
+                  autoFocus
+                  onChange={(e) => setEditTexto(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') salvarEdicao(t); if (e.key === 'Escape') setEditId(null); }}
+                  onBlur={() => salvarEdicao(t)}
+                />
+              ) : (
+                <span
+                  className={`flex-1 text-sm cursor-pointer ${t.feito ? 'line-through text-grafite-800/40' : 'text-grafite-800/80'}`}
+                  onClick={() => { setEditId(t.id); setEditTexto(t.texto); }}
+                  title="Clique para editar"
+                >
+                  {t.texto}
+                </span>
+              )}
+              <button title="Editar" onClick={() => { setEditId(t.id); setEditTexto(t.texto); }} className="p-1 rounded text-grafite-800/30 hover:text-marca-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+              </button>
+              <button title="Excluir" onClick={() => excluir(t)} className="p-1 rounded text-grafite-800/30 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6" /></svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
