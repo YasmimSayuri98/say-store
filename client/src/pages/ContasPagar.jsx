@@ -13,6 +13,7 @@ export default function ContasPagar() {
   const [pagar, setPagar] = useState(null); // { parcela, contaFinanceiraId, dataPagamento }
   const [expandidas, setExpandidas] = useState({}); // contaId -> mostra parcelas futuras
   const [editando, setEditando] = useState(null); // conta em edição (dados, não parcelas)
+  const [editP, setEditP] = useState(null); // parcela em edição inline { id, valor, vencimento }
   const toast = useToast();
 
   async function carregar() {
@@ -76,6 +77,18 @@ export default function ContasPagar() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  function iniciarEditP(p) {
+    setEditP({ id: p.id, valor: String(p.valor), vencimento: new Date(p.vencimento).toISOString().slice(0, 10) });
+  }
+  async function salvarParcela() {
+    try {
+      if (!(Number(editP.valor) > 0)) return toast.erro('Valor deve ser maior que zero.');
+      await api.put('/contas-pagar/parcelas/' + editP.id, { valor: Number(editP.valor), vencimento: editP.vencimento });
+      toast.sucesso('Parcela atualizada.');
+      setEditP(null); carregar();
+    } catch (e) { toast.erro(e.message); }
+  }
+
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1); // parcelas a partir daqui = futuras
   const situacaoParcela = (p) => {
@@ -129,16 +142,37 @@ export default function ContasPagar() {
                   <tbody>
                     {linhas.map((p) => {
                       const s = situacaoParcela(p);
+                      const emEdicao = editP && editP.id === p.id;
                       return (
                         <tr key={p.id}>
                           <td className="td">{p.numero}/{c.numeroParcelas}</td>
-                          <td className="td">{data(p.vencimento)}</td>
-                          <td className="td text-right">{moeda(p.valor)}</td>
-                          <td className="td"><span className={'badge ' + s.cls}>{s.txt}</span>{p.pago && p.contaFinanceira ? <span className="text-xs text-grafite-800/40"> · {p.contaFinanceira.nome}</span> : ''}</td>
+                          <td className="td">
+                            {emEdicao
+                              ? <input type="date" className="input !py-1" value={editP.vencimento} onChange={(e) => setEditP({ ...editP, vencimento: e.target.value })} />
+                              : data(p.vencimento)}
+                          </td>
                           <td className="td text-right">
-                            {p.pago
-                              ? <button className="btn btn-ghost btn-sm text-grafite-800/60" onClick={() => estornar(p)}>Estornar</button>
-                              : <button className="btn btn-primary btn-sm" onClick={() => setPagar({ parcela: p, contaFinanceiraId: contasFin[0] ? String(contasFin[0].id) : '', dataPagamento: '' })}>Pagar</button>}
+                            {emEdicao
+                              ? <input type="number" step="0.01" className="input !py-1 w-24 text-right" value={editP.valor} onChange={(e) => setEditP({ ...editP, valor: e.target.value })} />
+                              : moeda(p.valor)}
+                          </td>
+                          <td className="td"><span className={'badge ' + s.cls}>{s.txt}</span>{p.pago && p.contaFinanceira ? <span className="text-xs text-grafite-800/40"> · {p.contaFinanceira.nome}</span> : ''}</td>
+                          <td className="td text-right whitespace-nowrap">
+                            {emEdicao ? (
+                              <>
+                                <button className="btn btn-primary btn-sm mr-1" onClick={salvarParcela}>Salvar</button>
+                                <button className="btn btn-ghost btn-sm text-grafite-800/60" onClick={() => setEditP(null)}>Cancelar</button>
+                              </>
+                            ) : p.pago ? (
+                              <button className="btn btn-ghost btn-sm text-grafite-800/60" onClick={() => estornar(p)}>Estornar</button>
+                            ) : (
+                              <>
+                                <button title="Editar valor/vencimento" className="p-1 rounded text-grafite-800/40 hover:text-marca-600 mr-1 align-middle" onClick={() => iniciarEditP(p)}>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 inline"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+                                </button>
+                                <button className="btn btn-primary btn-sm" onClick={() => setPagar({ parcela: p, contaFinanceiraId: contasFin[0] ? String(contasFin[0].id) : '', dataPagamento: '' })}>Pagar</button>
+                              </>
+                            )}
                           </td>
                         </tr>
                       );

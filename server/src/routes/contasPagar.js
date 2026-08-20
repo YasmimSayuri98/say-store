@@ -116,6 +116,35 @@ router.put('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Editar uma parcela (valor e/ou vencimento). Não permite editar parcela já paga.
+// Ao mudar o valor, o total da conta é recalculado (soma das parcelas).
+router.put('/parcelas/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const parcela = await prisma.parcelaConta.findUnique({ where: { id } });
+    if (!parcela) return res.status(404).json({ erro: 'Parcela não encontrada.' });
+    if (parcela.pago) return res.status(400).json({ erro: 'Parcela já paga não pode ser editada. Estorne o pagamento primeiro.' });
+
+    const data = {};
+    if (req.body.valor != null && req.body.valor !== '') {
+      const v = round2(req.body.valor);
+      if (!(v > 0)) return res.status(400).json({ erro: 'Valor deve ser maior que zero.' });
+      data.valor = v;
+    }
+    if (req.body.vencimento) data.vencimento = parseDataDia(req.body.vencimento);
+    if (Object.keys(data).length === 0) return res.status(400).json({ erro: 'Nada para atualizar.' });
+
+    const atualizada = await prisma.$transaction(async (tx) => {
+      await tx.parcelaConta.update({ where: { id }, data });
+      const parcelas = await tx.parcelaConta.findMany({ where: { contaPagarId: parcela.contaPagarId } });
+      const total = round2(parcelas.reduce((s, p) => s + p.valor, 0));
+      await tx.contaPagar.update({ where: { id: parcela.contaPagarId }, data: { valorTotal: total } });
+      return tx.parcelaConta.findUnique({ where: { id } });
+    });
+    res.json(atualizada);
+  } catch (e) { next(e); }
+});
+
 // Baixa (pagamento) de uma parcela: debita a conta financeira escolhida.
 router.post('/parcelas/:id/pagar', async (req, res, next) => {
   try {
