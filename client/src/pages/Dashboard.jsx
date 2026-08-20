@@ -210,7 +210,9 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
   return (
     <div className="card lg:col-span-2">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-bold text-grafite-900">Produção necessária</h2>
+        <h2 className="text-2xl font-display font-extrabold text-grafite-900 flex items-center gap-2">
+          <span className="inline-block w-1.5 h-6 rounded-full bg-marca-500" />Pedidos
+        </h2>
         <div className="flex items-center gap-3">
           <button className="text-xs font-semibold text-marca-600 hover:text-marca-700" onClick={onNovoPedido}>+ Pedido manual</button>
           <Link to="/plataformas" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Configurar →</Link>
