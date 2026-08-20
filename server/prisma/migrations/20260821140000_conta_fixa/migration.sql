@@ -1,0 +1,1 @@
+ALTER TABLE "ContaPagar" ADD COLUMN "fixa" BOOLEAN NOT NULL DEFAULT false;

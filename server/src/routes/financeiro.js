@@ -85,12 +85,17 @@ router.get('/resumo', async (req, res, next) => {
       const v = new Date(p.vencimento); return v >= hoje && v <= em30;
     }).reduce((s, p) => s + p.valor, 0));
 
-    // Total das parcelas pendentes que vencem no mês presente.
+    // Total das parcelas pendentes que vencem no mês presente e no mês seguinte.
     const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+    const inicioMesSeguinte = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 1);
     const mesAtual = round2(parcelasPendentes.filter((p) => {
       const v = new Date(p.vencimento); return v >= inicioMes && v < inicioProxMes;
     }).reduce((s, p) => s + p.valor, 0));
+    const proximoMes = round2(parcelasPendentes.filter((p) => {
+      const v = new Date(p.vencimento); return v >= inicioProxMes && v < inicioMesSeguinte;
+    }).reduce((s, p) => s + p.valor, 0));
+    const rotuloProximoMes = rotuloMes(inicioProxMes);
 
     // Próximas 5 parcelas a vencer (agenda)
     const proximas = parcelasPendentes.slice(0, 5).map((p) => ({
@@ -101,7 +106,7 @@ router.get('/resumo', async (req, res, next) => {
 
     res.json({
       contas, saldoTotal, saldoDisponivel, saldoReservaLucro,
-      contasPagar: { totalPendente, vencidoTotal, aVencer30, mesAtual },
+      contasPagar: { totalPendente, vencidoTotal, aVencer30, mesAtual, proximoMes, rotuloProximoMes },
       proximas, projecao, config: cfg,
     });
   } catch (e) { next(e); }

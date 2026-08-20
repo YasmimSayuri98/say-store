@@ -260,6 +260,7 @@ model ContaPagar {
   descricao      String
   categoria      String?
   formaPagamento String?  // em qual cartão/boleto a compra foi parcelada
+  fixa           Boolean  @default(false)  // conta fixa: repete todo mês (valorTotal = valor mensal) até cancelar
   valorTotal     Float
   numeroParcelas Int      @default(1)
   observacao     String?

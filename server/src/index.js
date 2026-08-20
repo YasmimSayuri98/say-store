@@ -61,4 +61,12 @@ setInterval(async () => {
   }
 }, INTERVALO_SYNC_PLATAFORMAS_MS);
 
+// Mantém as contas fixas com parcelas geradas continuamente (na subida e 1x por dia).
+async function manterContasFixas() {
+  try { await require('./routes/contasPagar').manterContasFixas(); }
+  catch (e) { console.error('[contas fixas] falha ao manter:', e.message); }
+}
+manterContasFixas();
+setInterval(manterContasFixas, 24 * 60 * 60 * 1000);
+
 module.exports = app;

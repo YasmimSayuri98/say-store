@@ -9,7 +9,7 @@ export default function ContasPagar() {
   const [contasFin, setContasFin] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
   const [novaAberto, setNovaAberto] = useState(false);
-  const [nova, setNova] = useState({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
+  const [nova, setNova] = useState({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '', fixa: false });
   const [pagar, setPagar] = useState(null); // { parcela, contaFinanceiraId, dataPagamento }
   const [expandidas, setExpandidas] = useState({}); // contaId -> mostra parcelas futuras
   const [editando, setEditando] = useState(null); // conta em edição (dados, não parcelas)
@@ -32,12 +32,12 @@ export default function ContasPagar() {
         descricao: nova.descricao, categoria: nova.categoria || undefined,
         formaPagamento: nova.formaPagamento || undefined,
         valorTotal: Number(nova.valorTotal) || 0,
-        numeroParcelas: nParc, primeiroVencimento: nova.primeiroVencimento,
-        observacao: nova.observacao || undefined,
+        numeroParcelas: nova.fixa ? 1 : nParc, primeiroVencimento: nova.primeiroVencimento,
+        observacao: nova.observacao || undefined, fixa: nova.fixa,
       });
       toast.sucesso('Conta cadastrada.');
       setNovaAberto(false);
-      setNova({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '' });
+      setNova({ descricao: '', categoria: '', formaPagamento: '', valorTotal: '', numeroParcelas: '1', primeiroVencimento: '', observacao: '', fixa: false });
       carregar();
     } catch (e) { toast.erro(e.message); }
   }
@@ -59,6 +59,12 @@ export default function ContasPagar() {
 
   async function excluir(conta) {
     try { await api.del('/contas-pagar/' + conta.id); toast.sucesso('Conta excluída.'); carregar(); }
+    catch (e) { toast.erro(e.message); }
+  }
+
+  async function cancelarFixa(conta) {
+    if (!window.confirm(`Cancelar a recorrência de "${conta.descricao}"? Ela para de se repetir e as parcelas futuras não pagas são removidas.`)) return;
+    try { await api.patch('/contas-pagar/' + conta.id + '/cancelar-fixa', {}); toast.sucesso('Recorrência cancelada.'); carregar(); }
     catch (e) { toast.erro(e.message); }
   }
 
@@ -125,9 +131,13 @@ export default function ContasPagar() {
             <div key={c.id} className="card">
               <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
                 <div>
-                  <div className="font-display font-bold text-grafite-900 text-lg">{c.descricao}</div>
+                  <div className="font-display font-bold text-grafite-900 text-lg flex items-center gap-2">
+                    {c.descricao}
+                    {c.fixa && <span className="badge badge-baixo">🔁 Fixa</span>}
+                  </div>
                   <div className="text-xs text-grafite-800/50">
-                    {c.categoria ? c.categoria + ' · ' : ''}{moeda(c.valorTotal)}{c.numeroParcelas > 1 ? ` em ${c.numeroParcelas}x` : ''} · {pagas}/{c.numeroParcelas} pagas
+                    {c.categoria ? c.categoria + ' · ' : ''}
+                    {c.fixa ? `${moeda(c.valorTotal)}/mês` : `${moeda(c.valorTotal)}${c.numeroParcelas > 1 ? ` em ${c.numeroParcelas}x` : ''} · ${pagas}/${c.numeroParcelas} pagas`}
                   </div>
                   {c.formaPagamento && <div className="text-xs text-marca-600 font-medium mt-0.5">💳 {c.formaPagamento}</div>}
                 </div>
@@ -193,6 +203,7 @@ export default function ContasPagar() {
               </div>
               <div className="flex justify-end gap-3 mt-2">
                 <button className="btn btn-ghost btn-sm text-grafite-800/60" onClick={() => editarConta(c)}>Editar</button>
+                {c.fixa && <button className="btn btn-ghost btn-sm text-amber-700" onClick={() => cancelarFixa(c)}>Cancelar recorrência</button>}
                 {pagas === 0 && <button className="btn btn-ghost btn-sm text-red-600" onClick={() => excluir(c)}>Excluir conta</button>}
               </div>
             </div>
@@ -207,16 +218,22 @@ export default function ContasPagar() {
             <div><label className="label">Descrição *</label><input className="input" value={nova.descricao} onChange={(e) => setNova({ ...nova, descricao: e.target.value })} placeholder="Ex.: Impressora 3D, Energia, Filamento" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Categoria</label><input className="input" value={nova.categoria} onChange={(e) => setNova({ ...nova, categoria: e.target.value })} placeholder="Opcional" /></div>
-              <div><label className="label">Valor total (R$) *</label><input type="number" step="0.01" className="input" value={nova.valorTotal} onChange={(e) => setNova({ ...nova, valorTotal: e.target.value })} /></div>
+              <div><label className="label">{nova.fixa ? 'Valor mensal (R$) *' : 'Valor total (R$) *'}</label><input type="number" step="0.01" className="input" value={nova.valorTotal} onChange={(e) => setNova({ ...nova, valorTotal: e.target.value })} /></div>
             </div>
             <div><label className="label">Cartão / Boleto</label><input className="input" value={nova.formaPagamento} onChange={(e) => setNova({ ...nova, formaPagamento: e.target.value })} placeholder="Ex.: Cartão Nubank, Boleto, Cartão Inter" /></div>
+            <label className="flex items-center gap-2 text-sm text-grafite-800/70">
+              <input type="checkbox" checked={nova.fixa} onChange={(e) => setNova({ ...nova, fixa: e.target.checked })} />
+              🔁 Conta fixa (repete todo mês até você cancelar)
+            </label>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Nº de parcelas</label><input type="number" min="1" className="input" value={nova.numeroParcelas} onChange={(e) => setNova({ ...nova, numeroParcelas: e.target.value })} /></div>
-              <div><label className="label">1º vencimento *</label><input type="date" className="input" value={nova.primeiroVencimento} onChange={(e) => setNova({ ...nova, primeiroVencimento: e.target.value })} /></div>
+              {!nova.fixa && <div><label className="label">Nº de parcelas</label><input type="number" min="1" className="input" value={nova.numeroParcelas} onChange={(e) => setNova({ ...nova, numeroParcelas: e.target.value })} /></div>}
+              <div><label className="label">{nova.fixa ? '1º vencimento *' : '1º vencimento *'}</label><input type="date" className="input" value={nova.primeiroVencimento} onChange={(e) => setNova({ ...nova, primeiroVencimento: e.target.value })} /></div>
             </div>
-            {nParc > 1 && Number(nova.valorTotal) > 0 && (
+            {nova.fixa && Number(nova.valorTotal) > 0 ? (
+              <p className="text-sm text-grafite-800/60">Repete <b>{moeda(Number(nova.valorTotal))}/mês</b> todo mês, a partir da data escolhida, até você cancelar.</p>
+            ) : !nova.fixa && nParc > 1 && Number(nova.valorTotal) > 0 ? (
               <p className="text-sm text-grafite-800/60">{nParc}x de <b>{moeda(valorParcela)}</b>, vencimentos mensais a partir da data escolhida.</p>
-            )}
+            ) : null}
             <div><label className="label">Observação</label><input className="input" value={nova.observacao} onChange={(e) => setNova({ ...nova, observacao: e.target.value })} placeholder="Opcional" /></div>
           </div>
           <div className="flex justify-end gap-2 mt-4">

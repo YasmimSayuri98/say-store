@@ -5,6 +5,44 @@ const { parseDataDia } = require('../utils/data');
 const { aplicarMovimentacao } = require('../services/financeiroService');
 const router = express.Router();
 
+const HORIZONTE_FIXA_MESES = 12; // conta fixa mantém parcelas até 12 meses à frente
+
+// Gera N parcelas mensais com o mesmo valor (conta fixa: cada mês é o valor mensal).
+function gerarParcelasFixas(valorMensal, primeiroVencimento, meses) {
+  const valor = round2(valorMensal);
+  const dataBase = parseDataDia(primeiroVencimento);
+  const parcelas = [];
+  for (let i = 0; i < meses; i++) {
+    const venc = new Date(dataBase);
+    venc.setMonth(venc.getMonth() + i);
+    parcelas.push({ numero: i + 1, valor, vencimento: venc });
+  }
+  return parcelas;
+}
+
+// Mantém as contas fixas sempre com parcelas até ~HORIZONTE meses à frente (recorrência contínua).
+async function manterContasFixas() {
+  const fixas = await prisma.contaPagar.findMany({ where: { fixa: true }, include: { parcelas: true } });
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const alvo = new Date(hoje.getFullYear(), hoje.getMonth() + HORIZONTE_FIXA_MESES, 1);
+  for (const c of fixas) {
+    if (c.parcelas.length === 0) continue;
+    const ultima = c.parcelas.reduce((max, p) => (new Date(p.vencimento) > new Date(max.vencimento) ? p : max), c.parcelas[0]);
+    let maxNumero = c.parcelas.reduce((m, p) => Math.max(m, p.numero), 0);
+    let venc = new Date(ultima.vencimento);
+    const novas = [];
+    while (venc < alvo) {
+      venc = new Date(venc); venc.setMonth(venc.getMonth() + 1);
+      maxNumero += 1;
+      novas.push({ contaPagarId: c.id, numero: maxNumero, valor: c.valorTotal, vencimento: new Date(venc) });
+    }
+    if (novas.length) {
+      await prisma.parcelaConta.createMany({ data: novas });
+      await prisma.contaPagar.update({ where: { id: c.id }, data: { numeroParcelas: c.parcelas.length + novas.length } });
+    }
+  }
+}
+
 // Gera parcelas iguais mensais a partir de um primeiro vencimento,
 // ajustando a última para fechar exatamente o valor total.
 function gerarParcelas(valorTotal, numero, primeiroVencimento) {
@@ -72,7 +110,10 @@ router.post('/', async (req, res, next) => {
       if (soma !== valorTotal) return res.status(400).json({ erro: `A soma das parcelas (${soma}) difere do valor total (${valorTotal}).` });
     } else {
       if (!b.primeiroVencimento) return res.status(400).json({ erro: 'Informe o primeiro vencimento.' });
-      parcelas = gerarParcelas(valorTotal, b.numeroParcelas || 1, b.primeiroVencimento);
+      // Conta fixa: valorTotal é o valor MENSAL; gera 12 meses (mantido contínuo pelo job).
+      parcelas = b.fixa
+        ? gerarParcelasFixas(valorTotal, b.primeiroVencimento, HORIZONTE_FIXA_MESES)
+        : gerarParcelas(valorTotal, b.numeroParcelas || 1, b.primeiroVencimento);
     }
 
     const conta = await prisma.contaPagar.create({
@@ -80,6 +121,7 @@ router.post('/', async (req, res, next) => {
         descricao: b.descricao.trim(),
         categoria: b.categoria || null,
         formaPagamento: b.formaPagamento && b.formaPagamento.trim() ? b.formaPagamento.trim() : null,
+        fixa: !!b.fixa,
         valorTotal,
         numeroParcelas: parcelas.length,
         observacao: b.observacao || null,
@@ -202,6 +244,25 @@ router.post('/parcelas/:id/estornar', async (req, res, next) => {
   }
 });
 
+// Cancelar a recorrência de uma conta fixa: para de gerar e remove as parcelas futuras não pagas.
+router.patch('/:id/cancelar-fixa', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const conta = await prisma.contaPagar.findUnique({ where: { id } });
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada.' });
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+    const removida = await prisma.$transaction(async (tx) => {
+      await tx.parcelaConta.deleteMany({ where: { contaPagarId: id, pago: false, vencimento: { gte: inicioProxMes } } });
+      const restantes = await tx.parcelaConta.count({ where: { contaPagarId: id } });
+      if (restantes === 0) { await tx.contaPagar.delete({ where: { id } }); return true; }
+      await tx.contaPagar.update({ where: { id }, data: { fixa: false, numeroParcelas: restantes } });
+      return false;
+    });
+    res.json({ ok: true, contaRemovida: removida });
+  } catch (e) { next(e); }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -213,4 +274,5 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.manterContasFixas = manterContasFixas;
 module.exports = router;
