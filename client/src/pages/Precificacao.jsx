@@ -4,16 +4,41 @@ import { moeda, numero } from '../format';
 import { useToast } from '../components/Toast';
 
 // Fórmulas espelhadas do back-end (precoService) para feedback ao vivo.
+// Tabela de taxas da Shopee por faixa de preço (fixo em R$ + %).
+const FAIXAS_SHOPEE = [
+  { max: 79.999999, fixo: 4, perc: 0.20 },
+  { max: 99.999999, fixo: 16, perc: 0.14 },
+  { max: 199.999999, fixo: 20, perc: 0.14 },
+  { max: 499.999999, fixo: 26, perc: 0.14 },
+  { max: Infinity, fixo: 26, perc: 0.14 },
+];
+function faixaShopee(preco) { for (const f of FAIXAS_SHOPEE) if (preco <= f.max) return f; return FAIXAS_SHOPEE[FAIXAS_SHOPEE.length - 1]; }
+function usaFaixaShopee(pl) { return /shopee/i.test(pl?.plataformaNome || pl?.nome || ''); }
+
 function custoFinalDe(p) { return (Number(p.custoAtualMateriais) || 0) + (Number(p.custosExtras) || 0); }
-function fracao(pl) { return ((Number(pl.comissaoPercentual) || 0) + (Number(pl.percentualFreteGratis) || 0)) / 100; }
+function taxaDe(pl, preco) {
+  if (usaFaixaShopee(pl)) { const f = faixaShopee(preco); return { perc: f.perc, fixo: f.fixo }; }
+  return { perc: ((Number(pl.comissaoPercentual) || 0) + (Number(pl.percentualFreteGratis) || 0)) / 100, fixo: Number(pl.taxaFixaPorItem) || 0 };
+}
 function precoSugerido(custoFinal, pl, margem) {
-  const denom = 1 - fracao(pl) - (Number(margem) || 0) / 100;
+  const m = (Number(margem) || 0) / 100;
+  if (usaFaixaShopee(pl)) {
+    let anterior = 0;
+    for (const f of FAIXAS_SHOPEE) {
+      const denom = 1 - f.perc - m;
+      if (denom > 0) { const p = Math.round(((custoFinal + f.fixo) / denom) * 100) / 100; if (p > anterior && p <= f.max) return p; }
+      anterior = f.max;
+    }
+    return null;
+  }
+  const denom = 1 - (((Number(pl.comissaoPercentual) || 0) + (Number(pl.percentualFreteGratis) || 0)) / 100) - m;
   if (denom <= 0) return null;
   return Math.round(((custoFinal + (Number(pl.taxaFixaPorItem) || 0)) / denom) * 100) / 100;
 }
 function financeiro(preco, custoFinal, pl) {
   const p = Number(preco) || 0;
-  const taxas = p * fracao(pl) + (Number(pl.taxaFixaPorItem) || 0);
+  const { perc, fixo } = taxaDe(pl, p);
+  const taxas = p * perc + fixo;
   const lucro = p - taxas - custoFinal;
   const margemReal = p > 0 ? (lucro / p) * 100 : 0;
   return { taxas, lucro, margemReal };
@@ -150,7 +175,9 @@ export default function Precificacao() {
                         <tr key={pl.plataformaId}>
                           <td className="td font-medium">{pl.plataformaNome}</td>
                           <td className="td text-xs text-grafite-800/60">
-                            {numero(pl.comissaoPercentual + pl.percentualFreteGratis)}% + R$ {numero(pl.taxaFixaPorItem)}/item
+                            {usaFaixaShopee(pl)
+                              ? <span title="Calculada automaticamente pela faixa de preço da Shopee">Por faixa (automático)</span>
+                              : <>{numero(pl.comissaoPercentual + pl.percentualFreteGratis)}% + R$ {numero(pl.taxaFixaPorItem)}/item</>}
                           </td>
                           <td className="td">
                             {sugerido == null
