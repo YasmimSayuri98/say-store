@@ -1,60 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { moeda, numero } from '../format';
 import { useToast } from '../components/Toast';
-
-// Fórmulas espelhadas do back-end (precoService) para feedback ao vivo.
-// Tabelas de taxas por faixa de preço (fixo em R$ + %).
-const FAIXAS_SHOPEE = [
-  { max: 79.999999, fixo: 4, perc: 0.20 },
-  { max: 99.999999, fixo: 16, perc: 0.14 },
-  { max: 199.999999, fixo: 20, perc: 0.14 },
-  { max: 499.999999, fixo: 26, perc: 0.14 },
-  { max: Infinity, fixo: 26, perc: 0.14 },
-];
-const FAIXAS_TIKTOK = [
-  { max: 49.999999, fixo: 4, perc: 0.10 },
-  { max: Infinity, fixo: 6, perc: 0.06 },
-];
-function tabelaFaixa(pl) {
-  const nome = (pl?.plataformaNome || pl?.nome || '').toLowerCase();
-  if (nome.includes('shopee')) return FAIXAS_SHOPEE;
-  if (nome.includes('tiktok')) return FAIXAS_TIKTOK;
-  return null;
-}
-function usaFaixa(pl) { return !!tabelaFaixa(pl); }
-function faixaDe(tabela, preco) { for (const f of tabela) if (preco <= f.max) return f; return tabela[tabela.length - 1]; }
+import { financeiro, usaFaixa } from '../precoCalc';
 
 function custoFinalDe(p) { return (Number(p.custoAtualMateriais) || 0) + (Number(p.custosExtras) || 0); }
-function taxaDe(pl, preco) {
-  const tabela = tabelaFaixa(pl);
-  if (tabela) { const f = faixaDe(tabela, preco); return { perc: f.perc, fixo: f.fixo }; }
-  return { perc: ((Number(pl.comissaoPercentual) || 0) + (Number(pl.percentualFreteGratis) || 0)) / 100, fixo: Number(pl.taxaFixaPorItem) || 0 };
-}
-function precoSugerido(custoFinal, pl, margem) {
-  const m = (Number(margem) || 0) / 100;
-  const tabela = tabelaFaixa(pl);
-  if (tabela) {
-    let anterior = 0;
-    for (const f of tabela) {
-      const denom = 1 - f.perc - m;
-      if (denom > 0) { const p = Math.round(((custoFinal + f.fixo) / denom) * 100) / 100; if (p > anterior && p <= f.max) return p; }
-      anterior = f.max;
-    }
-    return null;
-  }
-  const denom = 1 - (((Number(pl.comissaoPercentual) || 0) + (Number(pl.percentualFreteGratis) || 0)) / 100) - m;
-  if (denom <= 0) return null;
-  return Math.round(((custoFinal + (Number(pl.taxaFixaPorItem) || 0)) / denom) * 100) / 100;
-}
-function financeiro(preco, custoFinal, pl) {
-  const p = Number(preco) || 0;
-  const { perc, fixo } = taxaDe(pl, p);
-  const taxas = p * perc + fixo;
-  const lucro = p - taxas - custoFinal;
-  const margemReal = p > 0 ? (lucro / p) * 100 : 0;
-  return { taxas, lucro, margemReal };
-}
 
 export default function Precificacao() {
   const [produtos, setProdutos] = useState([]);
@@ -82,23 +33,6 @@ export default function Precificacao() {
     setProdutos((prev) => prev.map((p) => p.produtoId === pid
       ? { ...p, plataformas: p.plataformas.map((pl) => pl.plataformaId === plataformaId ? { ...pl, precoVenda: valor } : pl) }
       : p));
-  }
-  function aplicarSugerido(pid, plataformaId) {
-    const p = produtos.find((x) => x.produtoId === pid);
-    const pl = p.plataformas.find((x) => x.plataformaId === plataformaId);
-    const s = precoSugerido(custoFinalDe(p), pl, p.margemLucroAlvo);
-    if (s == null) return toast.erro('Taxas + margem passam de 100%. Reduza a margem alvo.');
-    setPreco(pid, plataformaId, String(s));
-  }
-  function aplicarTodosSugeridos(pid) {
-    const p = produtos.find((x) => x.produtoId === pid);
-    setProdutos((prev) => prev.map((x) => x.produtoId !== pid ? x : {
-      ...x,
-      plataformas: x.plataformas.map((pl) => {
-        const s = precoSugerido(custoFinalDe(p), pl, p.margemLucroAlvo);
-        return s == null ? pl : { ...pl, precoVenda: String(s) };
-      }),
-    }));
   }
 
   async function salvar(pid) {
@@ -131,9 +65,9 @@ export default function Precificacao() {
     <div>
       <h1 className="text-3xl font-display font-extrabold text-grafite-900 mb-1">Precificação</h1>
       <p className="text-grafite-800/60 mb-6 text-sm max-w-3xl">
-        Defina os <b>custos extras</b> (energia, mão de obra, embalagem) e a <b>margem de lucro alvo</b> de
-        cada produto. O sistema sugere o preço de venda ideal em cada plataforma já embutindo custo e taxas.
-        Você pode aceitar o sugerido ou digitar o seu preço — o lucro é recalculado na hora.
+        Defina os <b>custos extras</b> de cada produto e o <b>preço de venda</b> em cada plataforma — o
+        sistema mostra na hora o <b>lucro líquido</b> e a <b>margem</b>. Para descobrir o preço ideal a
+        partir de uma margem alvo, use a aba <Link to="/preco-sugerido" className="text-marca-600 font-medium">Preço sugerido</Link>.
       </p>
 
       <input
@@ -185,15 +119,13 @@ export default function Precificacao() {
                   <thead><tr>
                     <th className="th">Plataforma</th>
                     <th className="th">Taxas do canal</th>
-                    <th className="th">Preço sugerido</th>
                     <th className="th">Preço de venda</th>
                     <th className="th">Taxas (R$)</th>
-                    <th className="th">Lucro / un</th>
-                    <th className="th">Margem real</th>
+                    <th className="th">Lucro líquido / un</th>
+                    <th className="th">% de lucro</th>
                   </tr></thead>
                   <tbody>
                     {p.plataformas.map((pl) => {
-                      const sugerido = precoSugerido(custoFinal, pl, p.margemLucroAlvo);
                       const fin = financeiro(pl.precoVenda, custoFinal, pl);
                       const lucroPos = fin.lucro >= 0;
                       return (
@@ -203,11 +135,6 @@ export default function Precificacao() {
                             {usaFaixa(pl)
                               ? <span title="Calculada automaticamente pela faixa de preço da plataforma">Por faixa (automático)</span>
                               : <>{numero(pl.comissaoPercentual + pl.percentualFreteGratis)}% + R$ {numero(pl.taxaFixaPorItem)}/item</>}
-                          </td>
-                          <td className="td">
-                            {sugerido == null
-                              ? <span className="text-red-600 text-xs">margem alta demais</span>
-                              : <button className="text-marca-600 font-medium hover:underline" onClick={() => aplicarSugerido(p.produtoId, pl.plataformaId)} title="Clique para aplicar">{moeda(sugerido)}</button>}
                           </td>
                           <td className="td">
                             <input type="number" step="0.01" className="input w-28" value={pl.precoVenda}
@@ -224,9 +151,8 @@ export default function Precificacao() {
               </div>
 
               <div className="flex justify-end gap-2 mt-4">
-                <button className="btn btn-secondary" onClick={() => aplicarTodosSugeridos(p.produtoId)}>Aplicar preços sugeridos</button>
                 <button className="btn btn-primary" disabled={salvandoId === p.produtoId} onClick={() => salvar(p.produtoId)}>
-                  {salvandoId === p.produtoId ? 'Salvando...' : 'Salvar'}
+                  {salvandoId === p.produtoId ? 'Salvando...' : 'Salvar alterações'}
                 </button>
               </div>
             </div>

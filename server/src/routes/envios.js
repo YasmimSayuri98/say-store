@@ -361,14 +361,20 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Recalcula o faturamento/lucro de TODOS os envios usando os preços de venda e custos ATUAIS.
-// Útil ao configurar a precificação depois de já ter registrado envios (ex.: onboarding).
+// Preenche o faturamento/lucro APENAS dos envios que ficaram SEM preço (itens com
+// precoVendaUnitario = 0) — tipicamente o backlog de vendas registradas antes de existir
+// a precificação. Vendas já com preço registrado NÃO são alteradas, para não sobrescrever
+// o histórico correto quando a precificação muda daqui pra frente.
 router.post('/recalcular', async (req, res, next) => {
   try {
     const envios = await prisma.registroEnvio.findMany({ include: { itens: true }, orderBy: { id: 'asc' } });
     let atualizados = 0;
     for (const envio of envios) {
       if (!envio.plataformaId) continue; // sem plataforma não há preço de venda/lucro
+      // Só mexe em envios com ao menos um item sem preço (backlog). Os demais ficam intactos.
+      const temItemSemPreco = envio.itens.some((it) => !(Number(it.precoVendaUnitario) > 0));
+      if (!temItemSemPreco) continue;
+
       const plataforma = await prisma.plataformaVenda.findUnique({ where: { id: envio.plataformaId } });
       if (!plataforma) continue;
 
@@ -379,15 +385,23 @@ router.post('/recalcular', async (req, res, next) => {
           include: { precos: { where: { plataformaId: envio.plataformaId } } },
         });
         if (!produto) continue;
-        const custoFinal = custoFinalProduto(produto);
-        const preco = produto.precos[0] ? produto.precos[0].precoVenda : 0;
-        const fin = financeiroUnitario(preco, custoFinal, plataforma);
         const q = it.quantidade;
+        const jaPrecificado = Number(it.precoVendaUnitario) > 0;
+        // Itens já com preço mantêm o snapshot original; só os sem preço são preenchidos.
+        const custoFinal = jaPrecificado
+          ? (Number(it.custoUnitario) || custoFinalProduto(produto))
+          : custoFinalProduto(produto);
+        const preco = jaPrecificado
+          ? Number(it.precoVendaUnitario)
+          : (produto.precos[0] ? produto.precos[0].precoVenda : 0);
+        const fin = financeiroUnitario(preco, custoFinal, plataforma);
         faturamento = round4(faturamento + fin.preco * q);
         taxas = round4(taxas + fin.taxas * q);
         custoProdutos = round4(custoProdutos + custoFinal * q);
         custoMateriais = round4(custoMateriais + (produto.custoAtualMateriais || 0) * q);
-        await prisma.itemRegistroEnvio.update({ where: { id: it.id }, data: { precoVendaUnitario: fin.preco, custoUnitario: custoFinal } });
+        if (!jaPrecificado) {
+          await prisma.itemRegistroEnvio.update({ where: { id: it.id }, data: { precoVendaUnitario: fin.preco, custoUnitario: custoFinal } });
+        }
       }
       const lucro = round4(faturamento - taxas - custoProdutos);
       await prisma.registroEnvio.update({

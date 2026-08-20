@@ -35,6 +35,7 @@ const grupos = [
     titulo: 'Vendas e finanças',
     links: [
       { to: '/plataformas', label: 'Plataformas', icone: 'M3 3h18v14H3zM3 21h18M8 21v-4M16 21v-4' },
+      { to: '/preco-sugerido', label: 'Preço sugerido', icone: 'M9 7h6M9 11h6M9 15h4M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z' },
       { to: '/precificacao', label: 'Precificação', icone: 'M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6' },
       { to: '/faturamento', label: 'Faturamento e lucro', icone: 'M3 3v18h18M7 14l3-3 3 3 5-6' },
     ],

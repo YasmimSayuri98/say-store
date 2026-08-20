@@ -22,6 +22,7 @@ import ListaCompras from './pages/ListaCompras';
 import ValorEstoque from './pages/ValorEstoque';
 import Plataformas from './pages/Plataformas';
 import Precificacao from './pages/Precificacao';
+import PrecoSugerido from './pages/PrecoSugerido';
 import Faturamento from './pages/Faturamento';
 import Financeiro from './pages/Financeiro';
 import ContasFinanceiras from './pages/ContasFinanceiras';
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="lista-compras" element={<ListaCompras />} />
             <Route path="valor-estoque" element={<ValorEstoque />} />
             <Route path="plataformas" element={<Plataformas />} />
+            <Route path="preco-sugerido" element={<PrecoSugerido />} />
             <Route path="precificacao" element={<Precificacao />} />
             <Route path="faturamento" element={<Faturamento />} />
             <Route path="financeiro" element={<Financeiro />} />
