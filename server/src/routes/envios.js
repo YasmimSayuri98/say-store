@@ -361,4 +361,43 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Recalcula o faturamento/lucro de TODOS os envios usando os preços de venda e custos ATUAIS.
+// Útil ao configurar a precificação depois de já ter registrado envios (ex.: onboarding).
+router.post('/recalcular', async (req, res, next) => {
+  try {
+    const envios = await prisma.registroEnvio.findMany({ include: { itens: true }, orderBy: { id: 'asc' } });
+    let atualizados = 0;
+    for (const envio of envios) {
+      if (!envio.plataformaId) continue; // sem plataforma não há preço de venda/lucro
+      const plataforma = await prisma.plataformaVenda.findUnique({ where: { id: envio.plataformaId } });
+      if (!plataforma) continue;
+
+      let faturamento = 0, taxas = 0, custoProdutos = 0, custoMateriais = 0;
+      for (const it of envio.itens) {
+        const produto = await prisma.produto.findUnique({
+          where: { id: it.produtoId },
+          include: { precos: { where: { plataformaId: envio.plataformaId } } },
+        });
+        if (!produto) continue;
+        const custoFinal = custoFinalProduto(produto);
+        const preco = produto.precos[0] ? produto.precos[0].precoVenda : 0;
+        const fin = financeiroUnitario(preco, custoFinal, plataforma);
+        const q = it.quantidade;
+        faturamento = round4(faturamento + fin.preco * q);
+        taxas = round4(taxas + fin.taxas * q);
+        custoProdutos = round4(custoProdutos + custoFinal * q);
+        custoMateriais = round4(custoMateriais + (produto.custoAtualMateriais || 0) * q);
+        await prisma.itemRegistroEnvio.update({ where: { id: it.id }, data: { precoVendaUnitario: fin.preco, custoUnitario: custoFinal } });
+      }
+      const lucro = round4(faturamento - taxas - custoProdutos);
+      await prisma.registroEnvio.update({
+        where: { id: envio.id },
+        data: { faturamentoBruto: faturamento, totalTaxas: taxas, custoTotalProdutos: custoProdutos, custoTotalMateriais: custoMateriais, lucro },
+      });
+      atualizados++;
+    }
+    res.json({ atualizados });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

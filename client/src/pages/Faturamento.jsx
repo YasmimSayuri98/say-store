@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { moeda, numero } from '../format';
+import { useToast } from '../components/Toast';
 
 function Cartao({ titulo, valor, cor }) {
   return (
@@ -15,6 +16,8 @@ export default function Faturamento() {
   const [de, setDe] = useState('');
   const [ate, setAte] = useState('');
   const [dados, setDados] = useState(null);
+  const [recalculando, setRecalculando] = useState(false);
+  const toast = useToast();
 
   async function carregar() {
     const q = [];
@@ -24,14 +27,31 @@ export default function Faturamento() {
   }
   useEffect(() => { carregar(); }, []);
 
+  async function recalcular() {
+    if (!window.confirm('Recalcular o faturamento e o lucro de todos os envios usando os preços de venda e custos ATUAIS? Use após ajustar a precificação.')) return;
+    setRecalculando(true);
+    try {
+      const r = await api.post('/envios/recalcular', {});
+      toast.sucesso(`${r.atualizados} envio(s) recalculado(s) com os preços atuais.`);
+      carregar();
+    } catch (e) { toast.erro(e.message); }
+    setRecalculando(false);
+  }
+
   const t = dados?.total;
 
   return (
     <div>
-      <h1 className="text-3xl font-display font-extrabold text-grafite-900 mb-1">Faturamento e lucro</h1>
+      <div className="flex flex-wrap justify-between items-start gap-3 mb-1">
+        <h1 className="text-3xl font-display font-extrabold text-grafite-900">Faturamento e lucro</h1>
+        <button className="btn btn-secondary" onClick={recalcular} disabled={recalculando}>
+          {recalculando ? 'Recalculando…' : '↻ Recalcular com preços atuais'}
+        </button>
+      </div>
       <p className="text-grafite-800/60 mb-6 text-sm max-w-3xl">
         Resultado dos envios registrados, separado por plataforma. O faturamento bruto é a soma dos preços
         de venda; o lucro desconta as taxas do canal e o custo dos produtos (materiais + extras).
+        <br /><span className="text-grafite-800/50">Ajustou preços depois de já ter registrado envios? Clique em <b>Recalcular com preços atuais</b>.</span>
       </p>
 
       <div className="card mb-6">
