@@ -6,7 +6,7 @@ function custoFinalProduto(produto) {
   return round4((produto.custoAtualMateriais || 0) + (produto.custosExtras || 0));
 }
 
-// Tabela de taxas da Shopee por faixa de preço de venda (fixo em R$ + percentual).
+// Tabelas de taxas por faixa de preço de venda (fixo em R$ + percentual).
 // max é o teto inclusivo da faixa; a última faixa cobre qualquer valor acima.
 const FAIXAS_SHOPEE = [
   { max: 79.999999, fixo: 4, perc: 0.20 },
@@ -15,16 +15,25 @@ const FAIXAS_SHOPEE = [
   { max: 499.999999, fixo: 26, perc: 0.14 },
   { max: Infinity, fixo: 26, perc: 0.14 },
 ];
+const FAIXAS_TIKTOK = [
+  { max: 49.999999, fixo: 4, perc: 0.10 },
+  { max: Infinity, fixo: 6, perc: 0.06 },
+];
 
-function faixaShopee(preco) {
-  for (const f of FAIXAS_SHOPEE) if (preco <= f.max) return { fixo: f.fixo, perc: f.perc };
-  return { fixo: 26, perc: 0.14 };
+// Retorna a tabela de faixas da plataforma (Shopee/TikTok), ou null se usa taxa fixa configurada.
+function tabelaFaixa(plataforma) {
+  const nome = (plataforma && plataforma.nome ? plataforma.nome : '').toLowerCase();
+  if (nome.includes('shopee')) return FAIXAS_SHOPEE;
+  if (nome.includes('tiktok')) return FAIXAS_TIKTOK;
+  return null;
+}
+function faixaDe(tabela, preco) {
+  for (const f of tabela) if (preco <= f.max) return f;
+  return tabela[tabela.length - 1];
 }
 
-// A Shopee usa a tabela de faixas (detectada pelo nome da plataforma).
-function usaFaixaShopee(plataforma) {
-  return /shopee/i.test(plataforma && plataforma.nome ? plataforma.nome : '');
-}
+// A plataforma usa tabela de faixas (Shopee/TikTok).
+function usaFaixa(plataforma) { return !!tabelaFaixa(plataforma); }
 
 // Percentual total de taxas incidentes sobre o preço de venda (comissão + frete grátis), em fração.
 function fracaoPercentualPlataforma(plataforma) {
@@ -32,10 +41,11 @@ function fracaoPercentualPlataforma(plataforma) {
 }
 
 // Retorna { perc (fração), fixo (R$) } da plataforma para um dado preço de venda.
-// Shopee: pela tabela de faixas. Demais: pela configuração fixa da plataforma.
+// Shopee/TikTok: pela tabela de faixas. Demais: pela configuração fixa da plataforma.
 function taxaDaPlataforma(plataforma, preco) {
-  if (usaFaixaShopee(plataforma)) {
-    const f = faixaShopee(preco);
+  const tabela = tabelaFaixa(plataforma);
+  if (tabela) {
+    const f = faixaDe(tabela, preco);
     return { perc: f.perc, fixo: f.fixo };
   }
   return { perc: fracaoPercentualPlataforma(plataforma), fixo: plataforma.taxaFixaPorItem || 0 };
@@ -46,14 +56,15 @@ function taxaDaPlataforma(plataforma, preco) {
 // lucro = margem × preço  →  preço − (preço × p) − taxaFixa − custo = margem × preço
 //   preço = (custo + taxaFixa) / (1 − p − margem)
 //
-// Na Shopee (taxa por faixa), resolve dentro de cada faixa e usa a que "fecha" naquela faixa.
+// Em plataforma com faixas, resolve dentro de cada faixa e usa a que "fecha" naquela faixa.
 // Retorna null quando (taxas% + margem%) ≥ 100% (impossível atingir a margem).
 function precoSugerido(custoFinal, plataforma, margemPercentual) {
   const m = round4((margemPercentual || 0) / 100);
 
-  if (usaFaixaShopee(plataforma)) {
+  const tabela = tabelaFaixa(plataforma);
+  if (tabela) {
     let anterior = 0;
-    for (const f of FAIXAS_SHOPEE) {
+    for (const f of tabela) {
       const denom = round4(1 - f.perc - m);
       if (denom > 0) {
         const p = round2((custoFinal + f.fixo) / denom);
@@ -83,4 +94,4 @@ function financeiroUnitario(precoVenda, custoFinal, plataforma) {
   return { preco, comissao, taxaFixa, taxas, custoFinal, lucro, margemReal, percentualTaxa: round2(perc * 100) };
 }
 
-module.exports = { custoFinalProduto, fracaoPercentualPlataforma, precoSugerido, financeiroUnitario, usaFaixaShopee };
+module.exports = { custoFinalProduto, fracaoPercentualPlataforma, precoSugerido, financeiroUnitario, usaFaixa };
