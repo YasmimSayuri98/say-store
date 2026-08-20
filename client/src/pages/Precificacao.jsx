@@ -11,18 +11,31 @@ export default function Precificacao() {
   const [produtos, setProdutos] = useState([]);
   const [temPlataformas, setTemPlataformas] = useState(true);
   const [salvandoId, setSalvandoId] = useState(null);
+  const [editando, setEditando] = useState({}); // produtoId -> true quando em modo de edição
   const [busca, setBusca] = useState('');
   const toast = useToast();
 
   async function carregar() {
     const dados = await api.get('/precificacao');
     setTemPlataformas((dados.plataformas || []).length > 0);
-    setProdutos(dados.produtos.map((p) => ({
+    const lista = dados.produtos.map((p) => ({
       ...p,
       custosExtras: String(p.custosExtras ?? 0),
       margemLucroAlvo: String(p.margemLucroAlvo ?? 0),
       plataformas: p.plataformas.map((pl) => ({ ...pl, precoVenda: pl.precoVenda ? String(pl.precoVenda) : '' })),
-    })));
+    }));
+    setProdutos(lista);
+    // Produtos sem nenhum preço começam abertos para edição; os demais entram no modo "salvo".
+    // Preserva o modo de edição de produtos que o usuário já estava editando.
+    setEditando((prev) => {
+      const next = { ...prev };
+      for (const p of lista) {
+        if (!(p.produtoId in next)) {
+          next[p.produtoId] = !p.plataformas.some((pl) => Number(pl.precoVenda) > 0);
+        }
+      }
+      return next;
+    });
   }
   useEffect(() => { carregar(); }, []);
 
@@ -45,6 +58,7 @@ export default function Precificacao() {
         precos: p.plataformas.map((pl) => ({ plataformaId: pl.plataformaId, precoVenda: Number(pl.precoVenda) || 0 })),
       });
       toast.sucesso('Precificação salva.');
+      setEditando((prev) => ({ ...prev, [pid]: false })); // volta ao modo "salvo"
       carregar();
     } catch (e) { toast.erro(e.message); }
     finally { setSalvandoId(null); }
@@ -85,6 +99,7 @@ export default function Precificacao() {
           })
           .map((p) => {
           const custoFinal = custoFinalDe(p);
+          const emEdicao = !!editando[p.produtoId];
           return (
             <div key={p.produtoId} className="card">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
@@ -99,8 +114,12 @@ export default function Precificacao() {
                   </div>
                   <div>
                     <label className="label">Custos extras (R$)</label>
-                    <input type="number" step="0.01" className="input w-28" value={p.custosExtras}
-                      onChange={(e) => setCampo(p.produtoId, 'custosExtras', e.target.value)} />
+                    {emEdicao ? (
+                      <input type="number" step="0.01" className="input w-28" value={p.custosExtras}
+                        onChange={(e) => setCampo(p.produtoId, 'custosExtras', e.target.value)} />
+                    ) : (
+                      <div className="input bg-base-100 text-grafite-800/50 w-28 flex items-center">{moeda(p.custosExtras)}</div>
+                    )}
                   </div>
                   <div>
                     <label className="label">Custo final</label>
@@ -137,8 +156,12 @@ export default function Precificacao() {
                               : <>{numero(pl.comissaoPercentual + pl.percentualFreteGratis)}% + R$ {numero(pl.taxaFixaPorItem)}/item</>}
                           </td>
                           <td className="td">
-                            <input type="number" step="0.01" className="input w-28" value={pl.precoVenda}
-                              onChange={(e) => setPreco(p.produtoId, pl.plataformaId, e.target.value)} placeholder="0,00" />
+                            {emEdicao ? (
+                              <input type="number" step="0.01" className="input w-28" value={pl.precoVenda}
+                                onChange={(e) => setPreco(p.produtoId, pl.plataformaId, e.target.value)} placeholder="0,00" />
+                            ) : (
+                              <span className="text-grafite-800/50 font-medium">{Number(pl.precoVenda) > 0 ? moeda(pl.precoVenda) : '—'}</span>
+                            )}
                           </td>
                           <td className="td text-grafite-800/70">{moeda(fin.taxas)}</td>
                           <td className={'td font-semibold ' + (lucroPos ? 'text-green-700' : 'text-red-600')}>{moeda(fin.lucro)}</td>
@@ -150,10 +173,19 @@ export default function Precificacao() {
                 </table>
               </div>
 
-              <div className="flex justify-end gap-2 mt-4">
-                <button className="btn btn-primary" disabled={salvandoId === p.produtoId} onClick={() => salvar(p.produtoId)}>
-                  {salvandoId === p.produtoId ? 'Salvando...' : 'Salvar alterações'}
-                </button>
+              <div className="flex justify-end items-center gap-3 mt-4">
+                {emEdicao ? (
+                  <button className="btn btn-primary" disabled={salvandoId === p.produtoId} onClick={() => salvar(p.produtoId)}>
+                    {salvandoId === p.produtoId ? 'Salvando...' : 'Salvar alterações'}
+                  </button>
+                ) : (
+                  <>
+                    <span className="text-xs text-green-700 font-medium">✓ Preços salvos</span>
+                    <button className="btn btn-secondary" onClick={() => setEditando((prev) => ({ ...prev, [p.produtoId]: true }))}>
+                      Editar
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           );
