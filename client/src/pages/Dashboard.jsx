@@ -638,11 +638,21 @@ export default function Dashboard() {
   const itensAProduzir = producao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
   const itensAguardandoEnvio = producao.filter((it) => it.fase === 'AGUARDANDO_ENVIO');
 
-  // Contagem de pedidos a enviar: total pendente, com quebra entre os que precisam produzir e os
-  // que já têm estoque de produto pronto.
-  const totalAEnviar = producao.length;
-  const qtdComEstoque = producao.filter((it) => it.cobertoPorEstoque).length;
-  const qtdAProduzir = producao.filter((it) => !it.cobertoPorEstoque && !it.produzido).length;
+  // Contagem de PEDIDOS a enviar (pelo número do pedido, não por SKU). Itens de SKUs
+  // diferentes que pertencem ao mesmo número de pedido contam como um único pedido.
+  const pedidosMap = new Map();
+  for (const it of producao) {
+    const chave = it.numeroPedido || `__item_${it.id}`; // item sem número conta como pedido próprio
+    if (!pedidosMap.has(chave)) pedidosMap.set(chave, []);
+    pedidosMap.get(chave).push(it);
+  }
+  const totalAEnviar = pedidosMap.size;
+  let qtdAProduzir = 0, qtdComEstoque = 0;
+  for (const itens of pedidosMap.values()) {
+    // Pedido precisa produzir se algum de seus itens ainda não foi produzido nem coberto por estoque.
+    if (itens.some((it) => !it.cobertoPorEstoque && !it.produzido)) qtdAProduzir++;
+    else qtdComEstoque++;
+  }
 
   return (
     <div>
