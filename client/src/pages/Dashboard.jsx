@@ -321,7 +321,7 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
   );
 }
 
-function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
+function SecaoAguardandoEnvio({ itens, onEnviarPedido, onEditar, onExcluir }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -344,7 +344,10 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
                           <span className="text-xs text-grafite-800/50 truncate">{cab.numeroPedido}</span>
                           {itensPedido.length > 1 && <span className="text-[10px] text-grafite-800/40">· {itensPedido.length} itens</span>}
                         </div>
-                        <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                        <div className="flex items-center gap-2 shrink-0">
+                          <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                          <button className="btn btn-primary btn-sm whitespace-nowrap" onClick={() => onEnviarPedido(itensPedido)}>Enviar pedido</button>
+                        </div>
                       </div>
                       {cab.observacao && (
                         <div className="px-3 pt-2">
@@ -353,10 +356,7 @@ function SecaoAguardandoEnvio({ itens, onEnviar, onEditar, onExcluir }) {
                       )}
                       {itensPedido.map((it) => (
                         <div key={it.id} className="flex items-center justify-between gap-3 px-3 py-2 border-b last:border-b-0 border-grafite-900/5">
-                          <label className="flex items-center gap-2 cursor-pointer min-w-0">
-                            <input type="checkbox" checked={false} onChange={() => onEnviar(it)} />
-                            <span className="font-medium truncate">{it.produtoNome} × {numero(it.quantidade)}</span>
-                          </label>
+                          <span className="font-medium truncate min-w-0">{it.produtoNome} × {numero(it.quantidade)}</span>
                           <AcoesLinha onEditar={() => onEditar(it)} onExcluir={() => onExcluir(it)} />
                         </div>
                       ))}
@@ -534,28 +534,34 @@ function ModalEditarPedido({ item, produtos, plataformas, onClose, onSalvo }) {
 
 // Modal ao marcar um item como enviado: pergunta qual embalagem foi usada (opcional) para
 // baixar do estoque. Não afeta preço/lucro — é só controle de estoque.
-function ModalEnviar({ item, onClose, onEnviado }) {
+function ModalEnviar({ pedido, onClose, onEnviado }) {
   const [embalagens, setEmbalagens] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
+
+  const cab = pedido[0];
 
   async function confirmar() {
     const embs = linhasEmbalagemPayload(embalagens);
     if (embs.length === 0) return toast.erro('Selecione a embalagem usada no envio.');
     setSalvando(true);
     try {
-      await api.post(`/producao/${item.id}/enviar`, { embalagens: embs });
-      toast.sucesso(`${item.produtoNome} marcado como enviado.`);
-      onEnviado(item);
+      await api.post(`/producao/pedido/${cab.pedidoId}/enviar`, { embalagens: embs });
+      toast.sucesso(`Pedido ${cab.numeroPedido} marcado como enviado.`);
+      onEnviado(pedido);
     } catch (e) { toast.erro(e.message); }
     setSalvando(false);
   }
 
   return (
-    <Modal titulo="Marcar como enviado" onClose={onClose} largura="max-w-lg">
-      <p className="text-sm text-grafite-800/70 mb-3">
-        <span className="font-medium">{item.produtoNome} × {numero(item.quantidade)}</span> — pedido {item.numeroPedido}
-      </p>
+    <Modal titulo="Marcar pedido como enviado" onClose={onClose} largura="max-w-lg">
+      <div className="text-sm text-grafite-800/70 mb-3">
+        <div className="mb-1">Pedido <span className="font-medium">{cab.numeroPedido}</span> — {cab.plataformaNome}</div>
+        <ul className="list-disc pl-5 text-grafite-800/80">
+          {pedido.map((it) => <li key={it.id}>{it.produtoNome} × {numero(it.quantidade)}</li>)}
+        </ul>
+        <p className="text-xs text-grafite-800/50 mt-2">Selecione a embalagem usada — uma única embalagem para o pedido inteiro.</p>
+      </div>
       <SeletorEmbalagens linhas={embalagens} setLinhas={setEmbalagens} />
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -572,7 +578,7 @@ export default function Dashboard() {
   const [produtos, setProdutos] = useState([]);
   const [modalPedidoManual, setModalPedidoManual] = useState(false);
   const [pedidoEditando, setPedidoEditando] = useState(null);
-  const [enviandoItem, setEnviandoItem] = useState(null);
+  const [enviandoPedido, setEnviandoPedido] = useState(null);
   const toast = useToast();
 
   function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
@@ -616,9 +622,10 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
-  function onEnviado(item) {
-    setEnviandoItem(null);
-    setProducao((lista) => lista.filter((it) => it.id !== item.id));
+  function onEnviado(pedido) {
+    setEnviandoPedido(null);
+    const idsEnviados = new Set(pedido.map((it) => it.id));
+    setProducao((lista) => lista.filter((it) => !idsEnviados.has(it.id)));
   }
 
   async function excluir(item) {
@@ -683,7 +690,7 @@ export default function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-5">
         <NotasCard />
         <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
-        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviar={setEnviandoItem} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviarPedido={setEnviandoPedido} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -763,10 +770,10 @@ export default function Dashboard() {
         />
       )}
 
-      {enviandoItem && (
+      {enviandoPedido && (
         <ModalEnviar
-          item={enviandoItem}
-          onClose={() => setEnviandoItem(null)}
+          pedido={enviandoPedido}
+          onClose={() => setEnviandoPedido(null)}
           onEnviado={onEnviado}
         />
       )}

@@ -408,6 +408,82 @@ router.post('/:itemId/enviar', async (req, res, next) => {
   }
 });
 
+// Envia o PEDIDO inteiro de uma vez: todos os itens ainda não enviados (e já embalados) do
+// pedido são marcados como enviados usando UMA única seleção de embalagem — porque a embalagem
+// de envio é por pedido, não por item/SKU.
+router.post('/pedido/:pedidoId/enviar', async (req, res, next) => {
+  try {
+    const pedidoId = Number(req.params.pedidoId);
+    const resultado = await prisma.$transaction(async (tx) => {
+      const pedido = await tx.pedidoPlataforma.findUnique({
+        where: { id: pedidoId },
+        include: { plataforma: true, itens: { include: { produto: true } } },
+      });
+      if (!pedido) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
+
+      // Itens prontos para enviar: embalados e ainda não enviados.
+      const itensParaEnviar = pedido.itens.filter((it) => it.embalado && !it.enviado);
+      if (itensParaEnviar.length === 0) throw Object.assign(new Error('Nenhum item embalado pendente de envio neste pedido.'), { status: 400 });
+
+      // Embalagem é obrigatória no envio (uma vez para o pedido inteiro).
+      const embsValidas = (Array.isArray(req.body.embalagens) ? req.body.embalagens : []).filter((e) => e && e.embalagemId && Number(e.quantidade) > 0);
+      if (embsValidas.length === 0) throw Object.assign(new Error('Selecione a embalagem usada no envio.'), { status: 400 });
+
+      // Registro de envio do pedido (numeroPedido é único).
+      let envio = await tx.registroEnvio.findUnique({ where: { numeroPedido: pedido.numeroPedido } });
+      if (!envio) {
+        envio = await tx.registroEnvio.create({
+          data: {
+            dataEnvio: new Date(), numeroPedido: pedido.numeroPedido,
+            plataformaId: pedido.plataformaId, observacao: 'Enviado pela produção',
+          },
+        });
+      }
+
+      let addFat = 0, addTaxas = 0, addCustoProd = 0, addCustoMat = 0;
+      for (const item of itensParaEnviar) {
+        const qtd = item.quantidade;
+        addCustoMat = round4(addCustoMat + (item.produto ? item.produto.custoAtualMateriais : 0) * qtd);
+        if (item.produto) {
+          const custoUnit = custoFinalProduto(item.produto);
+          const precoRow = await tx.precoProduto.findFirst({ where: { produtoId: item.produtoId, plataformaId: pedido.plataformaId } });
+          const precoUnit = precoRow ? precoRow.precoVenda : 0;
+          const fin = financeiroUnitario(precoUnit, custoUnit, pedido.plataforma);
+          addFat = round4(addFat + fin.preco * qtd);
+          addTaxas = round4(addTaxas + fin.taxas * qtd);
+          addCustoProd = round4(addCustoProd + custoUnit * qtd);
+          await tx.itemRegistroEnvio.create({
+            data: { envioId: envio.id, produtoId: item.produtoId, quantidade: qtd, precoVendaUnitario: precoUnit, custoUnitario: custoUnit },
+          });
+        }
+        await tx.itemPedidoPlataforma.update({ where: { id: item.id }, data: { enviado: true, enviadoEm: new Date() } });
+      }
+
+      // Embalagem usada: baixa do estoque UMA vez para o pedido.
+      const custoEmbalagem = await aplicarEmbalagens(tx, req.body.embalagens, { envioId: envio.id });
+
+      const novoFat = round4(envio.faturamentoBruto + addFat);
+      const novoTaxas = round4(envio.totalTaxas + addTaxas);
+      const novoCustoProd = round4(envio.custoTotalProdutos + addCustoProd);
+      await tx.registroEnvio.update({
+        where: { id: envio.id },
+        data: {
+          faturamentoBruto: novoFat, totalTaxas: novoTaxas, custoTotalProdutos: novoCustoProd,
+          custoTotalMateriais: round4(envio.custoTotalMateriais + addCustoMat),
+          custoEmbalagem: round4(envio.custoEmbalagem + custoEmbalagem),
+          lucro: round4(novoFat - novoTaxas - novoCustoProd),
+        },
+      });
+
+      return { enviados: itensParaEnviar.length };
+    });
+    res.json(resultado);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
 router.post('/:itemId/enviar/desfazer', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
