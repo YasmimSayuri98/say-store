@@ -13,7 +13,6 @@ import Embalagens from './pages/Embalagens';
 import RelatoriosEnvio from './pages/RelatoriosEnvio';
 import Produtos from './pages/Produtos';
 import ProdutoDetalhe from './pages/ProdutoDetalhe';
-import Envios from './pages/Envios';
 import HistoricoEnvios from './pages/HistoricoEnvios';
 import EnvioDetalhe from './pages/EnvioDetalhe';
 import Movimentacoes from './pages/Movimentacoes';
@@ -53,7 +52,6 @@ export default function App() {
             <Route path="fornecedores" element={<Fornecedores />} />
             <Route path="produtos" element={<Produtos />} />
             <Route path="produtos/:id" element={<ProdutoDetalhe />} />
-            <Route path="envios" element={<Envios />} />
             <Route path="envios/:id" element={<EnvioDetalhe />} />
             <Route path="historico-envios" element={<HistoricoEnvios />} />
             <Route path="embalagens" element={<Embalagens />} />

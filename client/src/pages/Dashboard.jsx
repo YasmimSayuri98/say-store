@@ -214,7 +214,22 @@ function chkCls(ativo) {
   return `flex items-center gap-1.5 text-xs ${ativo ? 'cursor-pointer text-grafite-800/70' : 'text-grafite-800/40'}`;
 }
 
-function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir }) {
+const ROTULO_FOTO = {
+  IMPRESSA: { txt: '📷 Foto impressa', cls: 'bg-green-50 text-green-700 border-green-200' },
+  SEM_FOTO: { txt: 'Sem foto', cls: 'bg-base-100 text-grafite-800/60 border-grafite-900/10' },
+  CLIENTE_NAO_ENVIOU: { txt: '⚠️ Cliente não enviou', cls: 'bg-red-50 text-red-600 border-red-200' },
+};
+// Botão/etiqueta da situação da foto do cliente. Abre o card de opções ao clicar.
+function BotaoFoto({ it, onFoto }) {
+  const info = it.fotoStatus ? ROTULO_FOTO[it.fotoStatus] : { txt: '📷 Definir foto', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+  return (
+    <button onClick={() => onFoto(it)} className={`text-xs border rounded-full px-2 py-0.5 font-medium hover:opacity-80 ${info.cls}`}>
+      {info.txt}
+    </button>
+  );
+}
+
+function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir, onCapa, onPaginas, onDesfazerPaginas, onFoto, onEtiqueta }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -260,30 +275,50 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
                               {it.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
                             </span>
                             <div className="flex items-center gap-3 flex-wrap">
-                              {it.personalizado && (
-                                <label className={chkCls(!it.fotoImpressa && !it.semVinculo)}>
-                                  <input type="checkbox" checked={it.fotoImpressa} disabled={it.fotoImpressa} onChange={() => onMarcarFoto(it)} />
-                                  Foto impressa
+                              {/* Situação da foto (card) — produtos com foto do cliente */}
+                              {it.personalizado && !it.semVinculo && (
+                                <BotaoFoto it={it} onFoto={onFoto} />
+                              )}
+
+                              {/* Produção: álbum (capa + páginas) OU produção normal */}
+                              {it.album ? (
+                                <>
+                                  <label className={chkCls(!it.finalizado && !it.semVinculo)}>
+                                    <input type="checkbox" checked={it.capaFeita} disabled={it.finalizado || it.semVinculo}
+                                      onChange={() => onCapa(it)} />
+                                    Capa
+                                  </label>
+                                  <label className={chkCls(!it.paginasFeitas && !it.semVinculo)} title={it.paginaFilamentoNome ? `Filamento: ${it.paginaFilamentoNome}` : ''}>
+                                    <input type="checkbox" checked={it.paginasFeitas} disabled={it.semVinculo || it.finalizado}
+                                      onChange={() => it.paginasFeitas ? onDesfazerPaginas(it) : onPaginas(it)} />
+                                    Páginas{it.paginasFeitas && it.paginaFilamentoNome ? ` (${it.paginaFilamentoNome})` : ''}
+                                  </label>
+                                </>
+                              ) : (
+                                <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
+                                  <input
+                                    type="checkbox"
+                                    checked={it.produzido || it.cobertoPorEstoque}
+                                    disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
+                                    onChange={() => onProduzir(it)}
+                                  />
+                                  {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
                                 </label>
                               )}
-                              <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
-                                <input
-                                  type="checkbox"
-                                  checked={it.produzido || it.cobertoPorEstoque}
-                                  disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
-                                  onChange={() => onProduzir(it)}
-                                />
-                                {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
-                              </label>
-                              <label className={chkCls(!it.finalizado && !it.semVinculo && (it.produzido || it.cobertoPorEstoque) && (!it.personalizado || it.fotoImpressa))}>
-                                <input
-                                  type="checkbox"
-                                  checked={it.finalizado}
-                                  disabled={it.finalizado || it.semVinculo || !(it.produzido || it.cobertoPorEstoque) || (it.personalizado && !it.fotoImpressa)}
-                                  onChange={() => onFinalizar(it)}
-                                />
-                                Finalizado
-                              </label>
+
+                              {(() => {
+                                const producaoOk = it.album ? (it.capaFeita && it.paginasFeitas) : (it.produzido || it.cobertoPorEstoque);
+                                const fotoOk = !it.personalizado || !!it.fotoStatus;
+                                const podeFinalizar = !it.finalizado && !it.semVinculo && producaoOk && fotoOk;
+                                return (
+                                  <label className={chkCls(podeFinalizar)}>
+                                    <input type="checkbox" checked={it.finalizado} disabled={!podeFinalizar && !it.finalizado}
+                                      onChange={() => onFinalizar(it)} />
+                                    Finalizado
+                                  </label>
+                                );
+                              })()}
+
                               <label className={chkCls(!it.embalado && !it.semVinculo && it.finalizado)}>
                                 <input
                                   type="checkbox"
@@ -293,6 +328,14 @@ function SecaoAProduzir({ itens, onProduzir, onMarcarFoto, onFinalizar, onEmbala
                                 />
                                 Embalado
                               </label>
+
+                              {/* Etiqueta impressa (não desconta estoque; baixada na embalagem) */}
+                              {!it.semVinculo && (
+                                <label className={chkCls(true)}>
+                                  <input type="checkbox" checked={it.etiquetaImpressa} onChange={() => onEtiqueta(it)} />
+                                  Etiqueta impressa
+                                </label>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -571,6 +614,65 @@ function ModalEnviar({ pedido, onClose, onEnviado }) {
   );
 }
 
+// Modal para escolher o filamento usado nas páginas do álbum (desconta os gramas configurados).
+function ModalPaginas({ item, filamentos, onClose, onConfirmar }) {
+  const [filamentoId, setFilamentoId] = useState('');
+  const gramasTotal = (Number(item.paginaGramas) || 0) * (Number(item.quantidade) || 1);
+  return (
+    <Modal titulo="Páginas do álbum" onClose={onClose} largura="max-w-md">
+      <p className="text-sm text-grafite-800/70 mb-3">
+        <span className="font-medium">{item.produtoNome} × {numero(item.quantidade)}</span> — pedido {item.numeroPedido}
+      </p>
+      <div className="space-y-3">
+        <div>
+          <label className="label">Filamento usado nas páginas *</label>
+          <select className="input" value={filamentoId} onChange={(e) => setFilamentoId(e.target.value)} autoFocus>
+            <option value="">Selecione (branca, marmorizada…)</option>
+            {filamentos.map((f) => <option key={f.id} value={f.id}>{f.nome} — {numero(f.quantidade)}g em estoque</option>)}
+          </select>
+        </div>
+        <p className="text-xs text-grafite-800/50">
+          {gramasTotal > 0
+            ? <>Serão descontados <b>{numero(gramasTotal)}g</b> do filamento escolhido ({numero(item.paginaGramas)}g × {numero(item.quantidade)}).</>
+            : <>⚠️ Este produto está com <b>0g de página</b> configurado. Nenhum grama será descontado — ajuste na ficha do produto se quiser.</>}
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" disabled={!filamentoId} onClick={() => onConfirmar(item, filamentoId)}>Confirmar páginas</button>
+      </div>
+    </Modal>
+  );
+}
+
+// Modal para definir a situação da foto do cliente.
+function ModalFoto({ item, onClose, onDefinir }) {
+  const opcoes = [
+    { v: 'IMPRESSA', l: '📷 Foto impressa', d: 'A foto do cliente foi impressa.' },
+    { v: 'SEM_FOTO', l: 'Pedido sem foto', d: 'Este pedido não leva foto.' },
+    { v: 'CLIENTE_NAO_ENVIOU', l: '⚠️ Cliente não enviou a foto', d: 'Aguardando/sem foto do cliente.' },
+  ];
+  return (
+    <Modal titulo="Situação da foto" onClose={onClose} largura="max-w-md">
+      <p className="text-sm text-grafite-800/70 mb-3">
+        <span className="font-medium">{item.produtoNome} × {numero(item.quantidade)}</span> — pedido {item.numeroPedido}
+      </p>
+      <div className="space-y-2">
+        {opcoes.map((o) => (
+          <button key={o.v} onClick={() => onDefinir(item, o.v)}
+            className={`w-full text-left border rounded-lg px-3 py-2 hover:border-marca-400 transition-colors ${item.fotoStatus === o.v ? 'border-marca-500 bg-marca-50' : 'border-grafite-900/10'}`}>
+            <div className="font-medium text-sm text-grafite-900">{o.l}</div>
+            <div className="text-xs text-grafite-800/50">{o.d}</div>
+          </button>
+        ))}
+      </div>
+      {item.fotoStatus && (
+        <button className="btn btn-ghost btn-sm text-grafite-800/50 mt-3" onClick={() => onDefinir(item, '')}>Limpar situação</button>
+      )}
+    </Modal>
+  );
+}
+
 export default function Dashboard() {
   const [d, setD] = useState(null);
   const [producao, setProducao] = useState([]);
@@ -579,6 +681,9 @@ export default function Dashboard() {
   const [modalPedidoManual, setModalPedidoManual] = useState(false);
   const [pedidoEditando, setPedidoEditando] = useState(null);
   const [enviandoPedido, setEnviandoPedido] = useState(null);
+  const [filamentos, setFilamentos] = useState([]);
+  const [paginasModal, setPaginasModal] = useState(null); // item do álbum p/ escolher filamento das páginas
+  const [fotoModal, setFotoModal] = useState(null); // item p/ definir situação da foto
   const toast = useToast();
 
   function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
@@ -588,7 +693,46 @@ export default function Dashboard() {
   useEffect(() => {
     api.get('/plataformas?ativo=true').then(setPlataformas).catch(() => {});
     api.get('/produtos?ativo=true').then(setProdutos).catch(() => {});
+    api.get('/materiais?ativo=true').then((ms) => setFilamentos(ms.filter((m) => m.filamento))).catch(() => {});
   }, []);
+
+  async function marcarCapa(item) {
+    try {
+      await api.post(`/producao/${item.id}/capa`, { feita: !item.capaFeita });
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function confirmarPaginas(item, filamentoId) {
+    try {
+      await api.post(`/producao/${item.id}/paginas`, { filamentoId: Number(filamentoId) });
+      toast.sucesso('Páginas registradas e filamento descontado.');
+      setPaginasModal(null);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function desfazerPaginas(item) {
+    try {
+      await api.post(`/producao/${item.id}/paginas/desfazer`, {});
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function definirFoto(item, status) {
+    try {
+      await api.post(`/producao/${item.id}/foto`, { status });
+      setFotoModal(null);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function marcarEtiqueta(item) {
+    try {
+      await api.post(`/producao/${item.id}/etiqueta`, { impressa: !item.etiquetaImpressa });
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
 
   async function produzir(item) {
     try {
@@ -610,14 +754,6 @@ export default function Dashboard() {
     try {
       await api.post(`/producao/${item.id}/embalar`, {});
       toast.sucesso(`${item.produtoNome} embalado.`);
-      recarregarProducao();
-    } catch (e) { toast.erro(e.message); }
-  }
-
-  async function marcarFoto(item) {
-    try {
-      await api.post(`/producao/${item.id}/foto-impressa`, {});
-      toast.sucesso('Foto marcada como impressa.');
       recarregarProducao();
     } catch (e) { toast.erro(e.message); }
   }
@@ -689,7 +825,8 @@ export default function Dashboard() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <NotasCard />
-        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onMarcarFoto={marcarFoto} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir} />
+        <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir}
+          onCapa={marcarCapa} onPaginas={(it) => setPaginasModal(it)} onDesfazerPaginas={desfazerPaginas} onFoto={(it) => setFotoModal(it)} onEtiqueta={marcarEtiqueta} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviarPedido={setEnviandoPedido} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">
@@ -775,6 +912,23 @@ export default function Dashboard() {
           pedido={enviandoPedido}
           onClose={() => setEnviandoPedido(null)}
           onEnviado={onEnviado}
+        />
+      )}
+
+      {paginasModal && (
+        <ModalPaginas
+          item={paginasModal}
+          filamentos={filamentos}
+          onClose={() => setPaginasModal(null)}
+          onConfirmar={confirmarPaginas}
+        />
+      )}
+
+      {fotoModal && (
+        <ModalFoto
+          item={fotoModal}
+          onClose={() => setFotoModal(null)}
+          onDefinir={definirFoto}
         />
       )}
     </div>

@@ -92,6 +92,7 @@ model Produto {
   custoAtualMateriais Float    @default(0)
   custosExtras        Float    @default(0)  // energia, mão de obra, embalagem não rastreada, etc.
   margemLucroAlvo     Float    @default(0)  // margem de lucro alvo (%) para sugerir preço
+  paginaGramas        Float    @default(0)  // álbuns (SKU LIV-FOT-PERS): gramas de filamento das páginas, descontadas ao marcar "páginas"
   ultimoCalculoCusto  DateTime?
   criadoEm            DateTime @default(now())
   atualizadoEm        DateTime @updatedAt
@@ -357,8 +358,16 @@ model ItemPedidoPlataforma {
   produzidoDoEstoque Boolean? // true = "produzido" consumiu do estoque de produto pronto; false = descontou material
   finalizado     Boolean   @default(false)  // etapa: acabamento/finalização concluída (entre produzido e embalado)
   finalizadoEm   DateTime?
-  fotoImpressa   Boolean   @default(false)  // impressão da foto do cliente concluída (produtos personalizados)
+  fotoImpressa   Boolean   @default(false)  // impressão da foto do cliente concluída (produtos personalizados) — mantido em sincronia com fotoStatus
   fotoImpressaEm DateTime?
+  fotoStatus     String?   // 'IMPRESSA' | 'SEM_FOTO' | 'CLIENTE_NAO_ENVIOU' (produtos com foto do cliente)
+  etiquetaImpressa   Boolean   @default(false)  // etiqueta de envio impressa (não desconta estoque; a etiqueta é baixada na embalagem)
+  etiquetaImpressaEm DateTime?
+  capaFeita      Boolean   @default(false)  // álbum: capa (cor do SKU) produzida — check visual, não desconta estoque
+  capaFeitaEm    DateTime?
+  paginasFeitas  Boolean   @default(false)  // álbum: páginas produzidas (desconta filamento escolhido)
+  paginasFeitasEm DateTime?
+  paginaFilamentoId Int?    // álbum: material (filamento) usado nas páginas
   embalado       Boolean   @default(false)  // etapa: pedido embalado (pronto para enviar)
   embaladoEm     DateTime?
   enviado        Boolean   @default(false)  // etapa final: produto já enviado ao cliente

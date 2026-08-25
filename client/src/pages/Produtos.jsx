@@ -161,6 +161,13 @@ export default function Produtos() {
               <input type="checkbox" checked={!!editando.producaoEstendida} onChange={(e) => setEditando({ ...editando, producaoEstendida: e.target.checked })} />
               Produção estendida (leva mais tempo — o “personalizado” da Shopee, com prazo de envio maior)
             </label>
+            {(editando.sku || '').toUpperCase().startsWith('LIV-FOT-PERS') && (
+              <div>
+                <label className="label">Gramas de página por álbum (g)</label>
+                <input type="number" step="0.1" className="input" value={editando.paginaGramas ?? ''} onChange={(e) => setEditando({ ...editando, paginaGramas: e.target.value })} placeholder="Ex.: 20" />
+                <p className="text-xs text-grafite-800/50 mt-1">Álbum: gramas de filamento das páginas, descontadas ao marcar “Páginas” na produção (você escolhe a cor na hora).</p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <button className="btn btn-secondary" onClick={() => setModalAberto(false)}>Cancelar</button>

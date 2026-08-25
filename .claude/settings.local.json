@@ -83,7 +83,15 @@
       "Bash(git commit -q -m 'Atualiza logo da Say Store *)",
       "Bash(mkdir -p prisma/migrations/20260818120000_conta_forma_pagamento)",
       "Bash(mkdir -p prisma/migrations/20260821120000_nota_dashboard)",
-      "Bash(mkdir -p prisma/migrations/20260821130000_tarefa)"
+      "Bash(mkdir -p prisma/migrations/20260821130000_tarefa)",
+      "Bash(node -c src/routes/producao.js)",
+      "Bash(node -c src/routes/contasFinanceiras.js)",
+      "Bash(node -c src/routes/produtos.js)",
+      "Bash(node -c src/routes/envios.js)",
+      "Bash(node -e \"const p=require\\('./client/package.json'\\);console.log\\(p.scripts\\)\")",
+      "Bash(node -e \"const p=require\\('./server/package.json'\\);console.log\\(p.scripts\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); process.stdout.write\\(process.env.APP_PASSWORD||''\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const l=fs.readFileSync\\('.env','utf8'\\).split\\(/\\\\r?\\\\n/\\).find\\(x=>x.startsWith\\('APP_PASSWORD='\\)\\);process.stdout.write\\(l.split\\('='\\)[1]||''\\)\")"
     ]
   }
 }

@@ -59,6 +59,7 @@ router.post('/', async (req, res, next) => {
         nome: b.nome.trim(), sku: b.sku.trim(), descricao: b.descricao || null,
         ativo: b.ativo != null ? !!b.ativo : true, personalizado: !!b.personalizado,
         producaoEstendida: !!b.producaoEstendida,
+        paginaGramas: Number(b.paginaGramas) || 0,
       },
     });
     res.status(201).json(produto);
@@ -75,7 +76,7 @@ router.put('/:id', async (req, res, next) => {
     if (conflito) return res.status(409).json({ erro: 'Já existe outro produto com esse SKU.' });
     const produto = await prisma.produto.update({
       where: { id },
-      data: { nome: b.nome.trim(), sku: b.sku.trim(), descricao: b.descricao || null, personalizado: !!b.personalizado, producaoEstendida: !!b.producaoEstendida },
+      data: { nome: b.nome.trim(), sku: b.sku.trim(), descricao: b.descricao || null, personalizado: !!b.personalizado, producaoEstendida: !!b.producaoEstendida, paginaGramas: Number(b.paginaGramas) || 0 },
     });
     res.json(produto);
   } catch (e) { next(e); }
@@ -116,6 +117,7 @@ router.post('/:id/duplicar', async (req, res, next) => {
           producaoEstendida: original.producaoEstendida,
           custosExtras: original.custosExtras,
           margemLucroAlvo: original.margemLucroAlvo,
+          paginaGramas: original.paginaGramas,
           itensFicha: {
             create: original.itensFicha.map((it) => ({ materialId: it.materialId, quantidade: it.quantidade })),
           },

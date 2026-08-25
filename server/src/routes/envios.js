@@ -354,6 +354,9 @@ router.get('/:id', async (req, res, next) => {
         itens: { include: { produto: true } },
         plataforma: true,
         movimentacoes: { include: { material: { include: { unidade: true } } } },
+        itensPedidosPlataforma: {
+          select: { id: true, produtoId: true, skuPlataforma: true, nomePlataforma: true, fotoStatus: true, etiquetaImpressa: true },
+        },
       },
     });
     if (!envio) return res.status(404).json({ erro: 'Envio não encontrado.' });

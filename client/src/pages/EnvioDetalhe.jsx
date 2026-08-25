@@ -10,6 +10,9 @@ export default function EnvioDetalhe() {
   if (!envio) return <p>Carregando...</p>;
 
   const temFinanceiro = envio.plataforma || envio.faturamentoBruto > 0;
+  const rotuloFoto = { IMPRESSA: '📷 Foto impressa', SEM_FOTO: 'Sem foto', CLIENTE_NAO_ENVIOU: '⚠️ Cliente não enviou a foto' };
+  const itensPed = envio.itensPedidosPlataforma || [];
+  const temInfoFoto = itensPed.some((i) => i.fotoStatus);
 
   return (
     <div>
@@ -26,6 +29,22 @@ export default function EnvioDetalhe() {
           <Cartao titulo="Taxas da plataforma" valor={moeda(envio.totalTaxas)} cor="text-amber-600" />
           <Cartao titulo="Custo dos produtos" valor={moeda(envio.custoTotalProdutos)} cor="text-grafite-800" />
           <Cartao titulo="Lucro líquido" valor={moeda(envio.lucro)} cor={envio.lucro >= 0 ? 'text-green-700' : 'text-red-600'} />
+        </div>
+      )}
+
+      {temInfoFoto && (
+        <div className="card mt-4">
+          <h2 className="font-display font-bold text-grafite-900 mb-3">Situação da foto</h2>
+          <div className="flex flex-col gap-1.5">
+            {itensPed.map((i) => (
+              <div key={i.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-grafite-800/80">{i.nomePlataforma} <span className="text-xs text-grafite-800/45">({i.skuPlataforma})</span></span>
+                <span className={i.fotoStatus === 'CLIENTE_NAO_ENVIOU' ? 'text-red-600 font-medium' : i.fotoStatus === 'IMPRESSA' ? 'text-green-700 font-medium' : 'text-grafite-800/60'}>
+                  {rotuloFoto[i.fotoStatus] || '—'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

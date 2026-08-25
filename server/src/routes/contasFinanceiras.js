@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const { round2 } = require('../utils/money');
 const { aplicarMovimentacao } = require('../services/financeiroService');
+const { senhaCorreta } = require('../auth');
 const router = express.Router();
 
 const TIPOS = ['CAIXA', 'BANCO', 'RESERVA_LUCRO', 'OUTRO'];
@@ -70,6 +71,12 @@ router.post('/:id/movimentar', async (req, res, next) => {
     const b = req.body;
     const acao = b.acao; // APORTE, RETIRADA, DEFINIR
     const valor = round2(b.valor || 0);
+
+    // Ajustar o saldo (DEFINIR) é uma ação sensível: exige a senha do sistema (admin), para que
+    // funcionários possam usar o sistema sem poder alterar saldos manualmente.
+    if (acao === 'DEFINIR' && !senhaCorreta(b.senha)) {
+      return res.status(403).json({ erro: 'Senha do administrador incorreta. Ajuste de saldo bloqueado.' });
+    }
 
     const conta = await prisma.contaFinanceira.findUnique({ where: { id } });
     if (!conta) return res.status(404).json({ erro: 'Conta não encontrada.' });

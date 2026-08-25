@@ -32,9 +32,13 @@ export default function ContasFinanceiras() {
   }
 
   async function movimentar() {
+    if (movModal.acao === 'DEFINIR' && !(movModal.senha || '').trim()) {
+      return toast.erro('Digite a senha do administrador para ajustar o saldo.');
+    }
     try {
       await api.post('/contas-financeiras/' + movModal.conta.id + '/movimentar', {
         acao: movModal.acao, valor: Number(movModal.valor) || 0, descricao: movModal.descricao || undefined,
+        senha: movModal.acao === 'DEFINIR' ? movModal.senha : undefined,
       });
       toast.sucesso('Movimentação registrada.');
       setMovModal(null); carregar();
@@ -70,7 +74,7 @@ export default function ContasFinanceiras() {
             <div className="flex flex-wrap gap-2 mt-4">
               <button className="btn btn-secondary btn-sm" onClick={() => setMovModal({ conta: c, acao: 'APORTE', valor: '', descricao: '' })}>+ Aporte</button>
               <button className="btn btn-secondary btn-sm" onClick={() => setMovModal({ conta: c, acao: 'RETIRADA', valor: '', descricao: '' })}>− Retirada</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setMovModal({ conta: c, acao: 'DEFINIR', valor: String(c.saldoAtual), descricao: '' })}>Ajustar</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setMovModal({ conta: c, acao: 'DEFINIR', valor: String(c.saldoAtual), descricao: '', senha: '' })} title="Requer senha do administrador">🔒 Ajustar</button>
               <button className="btn btn-ghost btn-sm text-marca-600" onClick={() => abrirExtrato(c)}>Extrato</button>
             </div>
           </div>
@@ -103,6 +107,13 @@ export default function ContasFinanceiras() {
               <input type="number" step="0.01" className="input" value={movModal.valor} onChange={(e) => setMovModal({ ...movModal, valor: e.target.value })} autoFocus />
             </div>
             <div><label className="label">Descrição</label><input className="input" value={movModal.descricao} onChange={(e) => setMovModal({ ...movModal, descricao: e.target.value })} placeholder="Opcional" /></div>
+            {movModal.acao === 'DEFINIR' && (
+              <div>
+                <label className="label">🔒 Senha do administrador *</label>
+                <input type="password" className="input" value={movModal.senha || ''} onChange={(e) => setMovModal({ ...movModal, senha: e.target.value })} placeholder="Senha do sistema" autoComplete="off" />
+                <p className="text-xs text-grafite-800/50 mt-1">Ajustar o saldo exige a senha do sistema.</p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <button className="btn btn-secondary" onClick={() => setMovModal(null)}>Cancelar</button>

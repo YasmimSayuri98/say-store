@@ -34,7 +34,7 @@ export default function RelatoriosEnvio() {
 
   return (
     <div>
-      <h1 className="text-3xl font-display font-extrabold text-grafite-900 mb-1">Relatórios de envio</h1>
+      <h1 className="text-3xl font-display font-extrabold text-grafite-900 mb-1">Gastos de envios</h1>
       <p className="text-grafite-800/60 mb-5 text-sm max-w-2xl">
         Gastos com materiais de embalagem, consumo por material, estoque atual e o que precisa comprar.
         Os tipos de embalagem são cadastrados em <Link to="/embalagens" className="text-marca-600 font-medium">Embalagens</Link>.

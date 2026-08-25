@@ -7,6 +7,11 @@ const { marcarProduzido, desfazerProduzido } = require('../services/producaoEsto
 const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
 const router = express.Router();
 
+// Álbuns têm produção em duas partes (capa + páginas). Identificados pelo prefixo do SKU.
+function isAlbumSku(sku) {
+  return typeof sku === 'string' && sku.toUpperCase().startsWith('LIV-FOT-PERS');
+}
+
 // Calcula, a partir da ficha técnica do produto, se há estoque suficiente para a quantidade pedida.
 function checarEstoque(produto, quantidadePedida) {
   if (!produto || produto.itensFicha.length === 0) return { suficiente: true, faltando: [] };
@@ -60,11 +65,20 @@ router.get('/', async (req, res, next) => {
       }
     }
 
+    // Resolve o nome do filamento usado nas páginas (para exibir no Dashboard).
+    const filamentoIds = [...new Set(itens.map((it) => it.paginaFilamentoId).filter(Boolean))];
+    const filamentos = filamentoIds.length
+      ? await prisma.material.findMany({ where: { id: { in: filamentoIds } }, select: { id: true, nome: true } })
+      : [];
+    const filamentoNomePorId = new Map(filamentos.map((m) => [m.id, m.nome]));
+
     const resultado = itens.map((it) => {
       const check = checarEstoque(it.produto, it.quantidade);
       const personalizado = !!(it.produto && it.produto.personalizado);
       const cobertoPorEstoque = !!cobertoPorId.get(it.id);
       const produzidoOuCoberto = it.produzido || cobertoPorEstoque;
+      const sku = it.produto ? it.produto.sku : it.skuPlataforma;
+      const album = isAlbumSku(sku);
       return {
         id: it.id,
         pedidoId: it.pedidoId,
@@ -87,6 +101,16 @@ router.get('/', async (req, res, next) => {
         personalizado,
         producaoEstendida: !!(it.produto && it.produto.producaoEstendida),
         fotoImpressa: it.fotoImpressa,
+        fotoStatus: it.fotoStatus,
+        etiquetaImpressa: it.etiquetaImpressa,
+        // Álbum (produção em duas partes)
+        album,
+        sku,
+        paginaGramas: it.produto ? it.produto.paginaGramas : 0,
+        capaFeita: it.capaFeita,
+        paginasFeitas: it.paginasFeitas,
+        paginaFilamentoId: it.paginaFilamentoId,
+        paginaFilamentoNome: it.paginaFilamentoId ? (filamentoNomePorId.get(it.paginaFilamentoId) || null) : null,
         produzido: it.produzido,
         produzidoDoEstoque: it.produzidoDoEstoque,
         finalizado: it.finalizado,
@@ -166,6 +190,7 @@ router.post('/:itemId/produzir', async (req, res, next) => {
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.produzido) throw Object.assign(new Error('Este item já foi marcado como produzido.'), { status: 409 });
       if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto do catálogo a este item antes de marcar como produzido.'), { status: 400 });
+      if (isAlbumSku(item.produto.sku)) throw Object.assign(new Error('Álbum: use os passos "Capa" e "Páginas" em vez de "Produzido".'), { status: 400 });
 
       // Já existe um envio manual registrado para este número de pedido cobrindo este mesmo
       // produto? Então o estoque já foi descontado por lá — só marca o ciclo completo, sem
@@ -251,6 +276,166 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Define o status da foto do cliente: IMPRESSA | SEM_FOTO | CLIENTE_NAO_ENVIOU (ou vazio p/ limpar).
+// Mantém fotoImpressa em sincronia (true só quando IMPRESSA). Não mexe no estoque.
+const STATUS_FOTO = ['IMPRESSA', 'SEM_FOTO', 'CLIENTE_NAO_ENVIOU'];
+router.post('/:itemId/foto', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    const status = req.body.status ? String(req.body.status) : null;
+    if (status && !STATUS_FOTO.includes(status)) return res.status(400).json({ erro: 'Status de foto inválido.' });
+    const impressa = status === 'IMPRESSA';
+    const atualizado = await prisma.itemPedidoPlataforma.update({
+      where: { id: itemId },
+      data: { fotoStatus: status, fotoImpressa: impressa, fotoImpressaEm: impressa ? new Date() : null },
+    });
+    res.json(atualizado);
+  } catch (e) { next(e); }
+});
+
+// Marca/desmarca a etiqueta de envio como impressa. NÃO desconta estoque (a etiqueta é baixada
+// no consumo da embalagem, no momento do envio).
+router.post('/:itemId/etiqueta', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    const impressa = req.body.impressa !== false; // default: marcar como impressa
+    const atualizado = await prisma.itemPedidoPlataforma.update({
+      where: { id: itemId },
+      data: { etiquetaImpressa: impressa, etiquetaImpressaEm: impressa ? new Date() : null },
+    });
+    res.json(atualizado);
+  } catch (e) { next(e); }
+});
+
+// Marca item como "produzido" quando capa e páginas do álbum estiverem prontas.
+async function sincronizarProduzidoAlbum(tx, itemId) {
+  const it = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+  const ambas = it.capaFeita && it.paginasFeitas;
+  if (ambas && !it.produzido) {
+    // Páginas já descontaram o filamento; a capa é só visual. Não consome estoque de produto pronto.
+    await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: { produzido: true, produzidoEm: new Date(), produzidoDoEstoque: false } });
+  } else if (!ambas && it.produzido && !it.finalizado) {
+    await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: { produzido: false, produzidoEm: null, produzidoDoEstoque: null } });
+  }
+}
+
+// Álbum — CAPA (cor do SKU): apenas check visual, não desconta estoque.
+router.post('/:itemId/capa', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const feita = req.body.feita !== false; // default: marcar
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (item.finalizado && !feita) throw Object.assign(new Error('Desfaça o "finalizado" antes de desmarcar a capa.'), { status: 400 });
+      await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: { capaFeita: feita, capaFeitaEm: feita ? new Date() : null } });
+      await sincronizarProduzidoAlbum(tx, itemId);
+    });
+    res.json(await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } }));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+// Álbum — PÁGINAS: escolhe o filamento usado e desconta os gramas configurados no produto (paginaGramas).
+router.post('/:itemId/paginas', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    const filamentoId = Number(req.body.filamentoId);
+    if (!filamentoId) return res.status(400).json({ erro: 'Selecione o filamento usado nas páginas.' });
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { produto: true, pedido: { include: { plataforma: true } } },
+      });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (item.paginasFeitas) throw Object.assign(new Error('As páginas deste item já foram marcadas.'), { status: 409 });
+      if (!item.produto) throw Object.assign(new Error('Vincule um produto ao item antes de marcar as páginas.'), { status: 400 });
+
+      const material = await tx.material.findUnique({ where: { id: filamentoId } });
+      if (!material) throw Object.assign(new Error('Filamento não encontrado.'), { status: 404 });
+
+      // Gramas por página × quantidade de álbuns do item.
+      const gramas = round4((item.produto.paginaGramas || 0) * item.quantidade);
+      if (gramas > 0) {
+        if (material.quantidade < gramas) {
+          throw Object.assign(new Error(`Estoque insuficiente de ${material.nome}: disponível ${material.quantidade}g, necessário ${gramas}g.`), { status: 409 });
+        }
+        const qtdAnterior = material.quantidade;
+        const qtdResultante = round4(qtdAnterior - gramas);
+        await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
+        await tx.movimentacaoEstoque.create({
+          data: {
+            materialId: material.id, tipo: 'SAIDA_PRODUCAO_PLATAFORMA',
+            quantidadeAnterior: qtdAnterior, quantidadeMovimentada: gramas, quantidadeResultante: qtdResultante,
+            motivo: `Páginas do álbum — pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
+            itemPedidoPlataformaId: item.id,
+          },
+        });
+      }
+
+      await tx.itemPedidoPlataforma.update({
+        where: { id: itemId },
+        data: { paginasFeitas: true, paginasFeitasEm: new Date(), paginaFilamentoId: filamentoId },
+      });
+      await sincronizarProduzidoAlbum(tx, itemId);
+    });
+    res.json(await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } }));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
+// Desfaz as páginas: devolve o filamento ao estoque.
+router.post('/:itemId/paginas/desfazer', async (req, res, next) => {
+  try {
+    const itemId = Number(req.params.itemId);
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { produto: true, pedido: { include: { plataforma: true } } },
+      });
+      if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (!item.paginasFeitas) throw Object.assign(new Error('As páginas ainda não foram marcadas.'), { status: 400 });
+      if (item.finalizado) throw Object.assign(new Error('Desfaça o "finalizado" antes de desfazer as páginas.'), { status: 400 });
+
+      const gramas = round4((item.produto ? item.produto.paginaGramas : 0) * item.quantidade);
+      if (gramas > 0 && item.paginaFilamentoId) {
+        const material = await tx.material.findUnique({ where: { id: item.paginaFilamentoId } });
+        if (material) {
+          const qtdAnterior = material.quantidade;
+          const qtdResultante = round4(qtdAnterior + gramas);
+          await tx.material.update({ where: { id: material.id }, data: { quantidade: qtdResultante } });
+          await tx.movimentacaoEstoque.create({
+            data: {
+              materialId: material.id, tipo: 'ENTRADA_ESTORNO_PRODUCAO_PLATAFORMA',
+              quantidadeAnterior: qtdAnterior, quantidadeMovimentada: gramas, quantidadeResultante: qtdResultante,
+              motivo: `Estorno páginas do álbum — pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`,
+              itemPedidoPlataformaId: item.id,
+            },
+          });
+        }
+      }
+
+      await tx.itemPedidoPlataforma.update({
+        where: { id: itemId },
+        data: { paginasFeitas: false, paginasFeitasEm: null, paginaFilamentoId: null },
+      });
+      await sincronizarProduzidoAlbum(tx, itemId);
+    });
+    res.json(await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } }));
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
+});
+
 // Etapa "finalizado" (acabamento), entre produzido e embalado. Se o item ainda não foi produzido
 // mas há estoque de produto pronto, o "produzido" é resolvido automaticamente consumindo do
 // estoque (auto-produzido). Se não há estoque, exige que o "produzido" seja marcado antes.
@@ -265,14 +450,21 @@ router.post('/:itemId/finalizar', async (req, res, next) => {
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.finalizado) throw Object.assign(new Error('Este item já foi marcado como finalizado.'), { status: 409 });
       if (!item.produtoId || !item.produto) throw Object.assign(new Error('Vincule um produto ao item antes de finalizar.'), { status: 400 });
-      if (item.produto.personalizado && !item.fotoImpressa) {
-        throw Object.assign(new Error('Marque a foto como impressa antes de finalizar (produto personalizado).'), { status: 400 });
+      if (item.produto.personalizado && !item.fotoStatus) {
+        throw Object.assign(new Error('Defina a situação da foto (impressa, sem foto ou cliente não enviou) antes de finalizar.'), { status: 400 });
       }
 
       const data = { finalizado: true, finalizadoEm: new Date() };
+      const album = isAlbumSku(item.produto.sku);
 
-      // Auto-produzido: se ainda não produzido e há estoque de produto pronto, consome do estoque.
-      if (!item.produzido) {
+      if (album) {
+        // Álbum: só finaliza com capa e páginas prontas (as páginas já descontaram o filamento).
+        if (!(item.capaFeita && item.paginasFeitas)) {
+          throw Object.assign(new Error('Marque a capa e as páginas do álbum antes de finalizar.'), { status: 400 });
+        }
+        if (!item.produzido) { data.produzido = true; data.produzidoEm = new Date(); data.produzidoDoEstoque = false; }
+      } else if (!item.produzido) {
+        // Auto-produzido: se ainda não produzido e há estoque de produto pronto, consome do estoque.
         if (item.produto.estoque >= item.quantidade) {
           const { produzidoDoEstoque } = await marcarProduzido(tx, item, item.produto);
           data.produzido = true; data.produzidoEm = new Date(); data.produzidoDoEstoque = produzidoDoEstoque;
