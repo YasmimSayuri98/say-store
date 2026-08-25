@@ -17,6 +17,27 @@ function Estatistica({ titulo, valor, cor = 'text-grafite-900', destaque = false
   );
 }
 
+// Intervalo de datas (YYYY-MM-DD) de um preset de período para o filtro dos cards de resumo.
+function rangeDoPreset(preset) {
+  const iso = (dt) => dt.toISOString().slice(0, 10);
+  const hoje = new Date();
+  const y = hoje.getFullYear(), m = hoje.getMonth();
+  if (preset === 'hoje') return { de: iso(hoje), ate: iso(hoje) };
+  if (preset === '7d') { const d = new Date(hoje); d.setDate(d.getDate() - 6); return { de: iso(d), ate: iso(hoje) }; }
+  if (preset === 'mespassado') return { de: iso(new Date(y, m - 1, 1)), ate: iso(new Date(y, m, 0)) };
+  if (preset === 'ano') return { de: iso(new Date(y, 0, 1)), ate: iso(hoje) };
+  if (preset === 'tudo') return { de: '', ate: '' };
+  return { de: iso(new Date(y, m, 1)), ate: iso(hoje) }; // 'mes' (padrão)
+}
+const PRESETS = [
+  { v: 'hoje', l: 'Hoje' },
+  { v: '7d', l: '7 dias' },
+  { v: 'mes', l: 'Este mês' },
+  { v: 'mespassado', l: 'Mês passado' },
+  { v: 'ano', l: 'Este ano' },
+  { v: 'tudo', l: 'Tudo' },
+];
+
 // Título de bloco com destaque (fonte grande + barrinha da marca).
 function TituloBloco({ children, className = '' }) {
   return (
@@ -684,11 +705,24 @@ export default function Dashboard() {
   const [filamentos, setFilamentos] = useState([]);
   const [paginasModal, setPaginasModal] = useState(null); // item do álbum p/ escolher filamento das páginas
   const [fotoModal, setFotoModal] = useState(null); // item p/ definir situação da foto
+  const [preset, setPreset] = useState('mes'); // filtro de período dos cards de resumo
+  const [filtroDe, setFiltroDe] = useState(() => rangeDoPreset('mes').de);
+  const [filtroAte, setFiltroAte] = useState(() => rangeDoPreset('mes').ate);
   const toast = useToast();
 
   function recarregarProducao() { api.get('/producao').then(setProducao).catch(() => {}); }
 
-  useEffect(() => { api.get('/dashboard').then(setD).catch(() => {}); }, []);
+  function aplicarPreset(p) {
+    setPreset(p);
+    if (p !== 'custom') { const r = rangeDoPreset(p); setFiltroDe(r.de); setFiltroAte(r.ate); }
+  }
+
+  useEffect(() => {
+    const qs = [];
+    if (filtroDe) qs.push('de=' + filtroDe);
+    if (filtroAte) qs.push('ate=' + filtroAte);
+    api.get('/dashboard' + (qs.length ? '?' + qs.join('&') : '')).then(setD).catch(() => {});
+  }, [filtroDe, filtroAte]);
   useEffect(() => { recarregarProducao(); }, []);
   useEffect(() => {
     api.get('/plataformas?ativo=true').then(setPlataformas).catch(() => {});
@@ -804,21 +838,45 @@ export default function Dashboard() {
         <p className="text-grafite-800/60 mt-1">Visão geral do estoque e da produção</p>
       </div>
 
+      {/* Situação atual (sem filtro de data — são saldos/contagens do momento) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Estatistica titulo="Pedidos a enviar" valor={totalAEnviar} cor="text-marca-600" destaque sub={`${qtdAProduzir} a produzir · ${qtdComEstoque} com estoque`} />
         <Estatistica titulo="Disponível banco Cora" valor={moeda(d.saldoDisponivel)} cor="text-green-700" destaque />
         <Estatistica titulo="Lucro acumulado" valor={moeda(d.lucroAcumulado)} cor="text-marca-600" />
+        <Estatistica titulo="Produtos cadastrados" valor={d.produtosCadastrados} />
         <Estatistica titulo="Materiais cadastrados" valor={d.materiaisCadastrados} />
         <Estatistica titulo="Estoque baixo" valor={d.materiaisBaixo} cor={d.materiaisBaixo > 0 ? 'text-marca-600' : 'text-grafite-900'} />
         <Estatistica titulo="Sem estoque" valor={d.materiaisSemEstoque} cor={d.materiaisSemEstoque > 0 ? 'text-red-600' : 'text-grafite-900'} />
-        <Estatistica titulo="Produtos cadastrados" valor={d.produtosCadastrados} />
-        <Estatistica titulo="Custo materiais no mês" valor={moeda(d.custoMateriaisMes)} />
-        <Estatistica titulo="Produtos enviados no mês" valor={numero(d.produtosEnviadosMes)} />
+      </div>
+
+      {/* Resumo do período (com filtro de data) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <TituloBloco>Resumo do período</TituloBloco>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PRESETS.map((p) => (
+            <button key={p.v} onClick={() => aplicarPreset(p.v)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${preset === p.v ? 'bg-marca-500 text-white border-marca-500' : 'border-grafite-900/15 text-grafite-800/60 hover:border-marca-300'}`}>
+              {p.l}
+            </button>
+          ))}
+          <div className="flex items-center gap-1 ml-1">
+            <input type="date" className="input !py-1 !px-2 text-xs w-[135px]" value={filtroDe}
+              onChange={(e) => { setPreset('custom'); setFiltroDe(e.target.value); }} />
+            <span className="text-grafite-800/40 text-xs">até</span>
+            <input type="date" className="input !py-1 !px-2 text-xs w-[135px]" value={filtroAte}
+              onChange={(e) => { setPreset('custom'); setFiltroAte(e.target.value); }} />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <Estatistica titulo="Faturamento" valor={moeda(d.periodo?.faturamento || 0)} cor="text-green-700" destaque />
+        <Estatistica titulo="Lucro líquido" valor={moeda(d.periodo?.lucro || 0)} cor={(d.periodo?.lucro || 0) >= 0 ? 'text-green-700' : 'text-red-600'} destaque sub={`Taxas: ${moeda(d.periodo?.taxas || 0)}`} />
+        <Estatistica titulo="Produtos enviados" valor={numero(d.periodo?.produtosEnviados || 0)} />
+        <Estatistica titulo="Custo de materiais" valor={moeda(d.periodo?.custoMateriais || 0)} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-8">
         <Atalho to="/entradas" label="Registrar entrada" icone="M12 5v14M5 12l7 7 7-7" />
-        <Atalho to="/envios" label="Registrar envio" icone="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
         <Atalho to="/produtos" label="Cadastrar produto" icone="M12 5v14M5 12h14" />
         <Atalho to="/materiais" label="Cadastrar material" icone="M12 5v14M5 12h14" />
       </div>

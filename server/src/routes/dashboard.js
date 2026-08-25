@@ -9,6 +9,21 @@ function inicioDoMes() {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+// Converte 'YYYY-MM-DD' no início do dia (local); retorna null se inválido.
+function inicioDoDia(str) {
+  if (!str) return null;
+  const [y, m, d] = String(str).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+// Converte 'YYYY-MM-DD' no fim do dia (local); retorna null se inválido.
+function fimDoDia(str) {
+  if (!str) return null;
+  const [y, m, d] = String(str).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d, 23, 59, 59, 999);
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const materiais = await prisma.material.findMany({
@@ -29,12 +44,17 @@ router.get('/', async (req, res, next) => {
 
     const produtosCount = await prisma.produto.count({ where: { ativo: true } });
 
-    const desde = inicioDoMes();
-    const enviosMes = await prisma.registroEnvio.findMany({ where: { dataEnvio: { gte: desde } }, include: { itens: true } });
-    let custoMateriaisMes = 0, produtosEnviadosMes = 0;
-    for (const e of enviosMes) {
-      custoMateriaisMes = round4(custoMateriaisMes + e.custoTotalMateriais);
-      for (const it of e.itens) produtosEnviadosMes += it.quantidade;
+    // Período dos cards filtráveis por data. Padrão: mês atual até agora.
+    const de = inicioDoDia(req.query.de) || inicioDoMes();
+    const ate = fimDoDia(req.query.ate) || new Date();
+    const enviosPeriodo = await prisma.registroEnvio.findMany({ where: { dataEnvio: { gte: de, lte: ate } }, include: { itens: true } });
+    let custoMateriaisPeriodo = 0, produtosEnviadosPeriodo = 0, faturamentoPeriodo = 0, lucroPeriodo = 0, taxasPeriodo = 0;
+    for (const e of enviosPeriodo) {
+      custoMateriaisPeriodo = round4(custoMateriaisPeriodo + e.custoTotalMateriais);
+      faturamentoPeriodo = round4(faturamentoPeriodo + e.faturamentoBruto);
+      lucroPeriodo = round4(lucroPeriodo + e.lucro);
+      taxasPeriodo = round4(taxasPeriodo + e.totalTaxas);
+      for (const it of e.itens) produtosEnviadosPeriodo += it.quantidade;
     }
 
     const ultimasMovimentacoes = await prisma.movimentacaoEstoque.findMany({
@@ -61,8 +81,19 @@ router.get('/', async (req, res, next) => {
       materiaisSemEstoque: semEstoque,
       materiaisNormal: normal,
       produtosCadastrados: produtosCount,
-      custoMateriaisMes,
-      produtosEnviadosMes,
+      // Métricas do período selecionado (filtráveis por data)
+      periodo: {
+        de: de.toISOString(),
+        ate: ate.toISOString(),
+        faturamento: faturamentoPeriodo,
+        lucro: lucroPeriodo,
+        taxas: taxasPeriodo,
+        custoMateriais: custoMateriaisPeriodo,
+        produtosEnviados: produtosEnviadosPeriodo,
+      },
+      // Compat: mês atual (mantidos para não quebrar chamadas antigas)
+      custoMateriaisMes: custoMateriaisPeriodo,
+      produtosEnviadosMes: produtosEnviadosPeriodo,
       urgentes: urgentes.slice(0, 6),
       ultimasMovimentacoes,
       ultimosEnvios,
