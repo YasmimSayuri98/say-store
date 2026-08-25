@@ -44,6 +44,7 @@ export default function HistoricoEnvios() {
         <table className="w-full">
           <thead><tr>
             <th className="th">Data</th>
+            <th className="th">Nº do pedido</th>
             <th className="th">Plataforma</th>
             <th className="th">Produtos</th>
             <th className="th text-right">Faturamento</th>
@@ -54,14 +55,12 @@ export default function HistoricoEnvios() {
             {envios.map((e) => (
               <tr key={e.id}>
                 <td className="td">{data(e.dataEnvio)}</td>
+                <td className="td font-medium">{e.numeroPedido || <span className="text-grafite-800/40">—</span>}</td>
                 <td className="td">{e.plataforma ? <span className="badge badge-normal">{e.plataforma.nome}</span> : <span className="text-grafite-800/40">—</span>}</td>
                 <td className="td">
                   <div className="flex flex-col gap-0.5">
                     {e.itens.map((i) => (
-                      <span key={i.id}>
-                        {numero(i.quantidade)}x {i.produto.nome}
-                        {i.produto.sku && <span className="text-xs text-grafite-800/45 ml-1">({i.produto.sku})</span>}
-                      </span>
+                      <span key={i.id}>{numero(i.quantidade)}x {i.produto.nome}</span>
                     ))}
                   </div>
                 </td>
@@ -75,7 +74,7 @@ export default function HistoricoEnvios() {
                 </td>
               </tr>
             ))}
-            {envios.length === 0 && <tr><td className="td text-grafite-800/40" colSpan={6}>Nenhum envio.</td></tr>}
+            {envios.length === 0 && <tr><td className="td text-grafite-800/40" colSpan={7}>Nenhum envio.</td></tr>}
           </tbody>
         </table>
       </div>

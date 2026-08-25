@@ -275,6 +275,14 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                               {it.producaoEstendida && <span className="badge badge-sem ml-2">⏱️ Produção estendida</span>}
                             </span>
                             <div className="flex items-center gap-3 flex-wrap">
+                              {/* Etiqueta impressa (não desconta estoque; baixada na embalagem) */}
+                              {!it.semVinculo && (
+                                <label className={chkCls(true)}>
+                                  <input type="checkbox" checked={it.etiquetaImpressa} onChange={() => onEtiqueta(it)} />
+                                  Etiqueta impressa
+                                </label>
+                              )}
+
                               {/* Situação da foto (card) — produtos com foto do cliente */}
                               {it.personalizado && !it.semVinculo && (
                                 <BotaoFoto it={it} onFoto={onFoto} />
@@ -328,14 +336,6 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                                 />
                                 Embalado
                               </label>
-
-                              {/* Etiqueta impressa (não desconta estoque; baixada na embalagem) */}
-                              {!it.semVinculo && (
-                                <label className={chkCls(true)}>
-                                  <input type="checkbox" checked={it.etiquetaImpressa} onChange={() => onEtiqueta(it)} />
-                                  Etiqueta impressa
-                                </label>
-                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
