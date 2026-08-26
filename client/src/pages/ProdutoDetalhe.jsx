@@ -14,21 +14,23 @@ export default function ProdutoDetalhe() {
   async function carregar() {
     const p = await api.get('/produtos/' + id);
     setProduto(p);
-    setItens(p.ficha.map((f) => ({ materialId: f.materialId, quantidade: f.quantidade })));
+    setItens(p.ficha.map((f) => ({ materialId: f.materialId, quantidade: f.quantidade, parte: f.parte || 'GERAL' })));
   }
   useEffect(() => {
     carregar();
     api.get('/materiais?ativo=true').then(setMateriais);
   }, [id]);
 
-  function addItem() { setItens([...itens, { materialId: '', quantidade: '' }]); }
+  const isAlbum = !!produto && (produto.sku || '').toUpperCase().startsWith('LIV-FOT-PERS');
+
+  function addItem() { setItens([...itens, { materialId: '', quantidade: '', parte: isAlbum ? 'CAPA' : 'GERAL' }]); }
   function removeItem(i) { setItens(itens.filter((_, idx) => idx !== i)); }
   function setItem(i, campo, valor) { setItens(itens.map((it, idx) => idx === i ? { ...it, [campo]: valor } : it)); }
 
   async function salvarFicha() {
     try {
       const validos = itens.filter((it) => it.materialId && Number(it.quantidade) > 0)
-        .map((it) => ({ materialId: Number(it.materialId), quantidade: Number(it.quantidade) }));
+        .map((it) => ({ materialId: Number(it.materialId), quantidade: Number(it.quantidade), parte: it.parte || 'GERAL' }));
       await api.put('/produtos/' + id + '/ficha', { itens: validos });
       toast.sucesso('Ficha técnica salva e custo recalculado.');
       carregar();
@@ -46,10 +48,16 @@ export default function ProdutoDetalhe() {
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="card">
           <h2 className="font-display font-bold text-grafite-900 mb-3">Ficha técnica (editar)</h2>
+          {isAlbum && (
+            <div className="mb-3 text-xs bg-marca-50 border border-marca-100 rounded-lg px-3 py-2 text-grafite-800/70">
+              <b>Álbum:</b> marque cada material como <b>Capa</b> (cor do SKU, descontada ao marcar "Capa" na produção) ou <b>Páginas</b> (os gramas definem o quanto; na produção você escolhe o filamento branco/marmorizado usado). Tudo entra no custo.
+            </div>
+          )}
           <div className="space-y-2">
             {itens.length > 0 && (
               <div className="flex gap-2 px-0.5">
                 <span className="flex-1 text-[11px] font-semibold text-grafite-800/50 uppercase tracking-wide">Material</span>
+                {isAlbum && <span className="w-24 text-[11px] font-semibold text-grafite-800/50 uppercase tracking-wide">Parte</span>}
                 <span className="w-28 text-[11px] font-semibold text-grafite-800/50 uppercase tracking-wide">Quantidade</span>
                 <span className="w-8" />
               </div>
@@ -62,6 +70,13 @@ export default function ProdutoDetalhe() {
                     <option value="">Selecione o material</option>
                     {materiais.map((m) => <option key={m.id} value={m.id}>{m.nome} ({m.unidade.sigla})</option>)}
                   </select>
+                  {isAlbum && (
+                    <select className="input w-24 shrink-0" value={it.parte || 'GERAL'} onChange={(e) => setItem(i, 'parte', e.target.value)}>
+                      <option value="CAPA">Capa</option>
+                      <option value="PAGINA">Páginas</option>
+                      <option value="GERAL">Geral</option>
+                    </select>
+                  )}
                   <div className="relative w-28 shrink-0">
                     <input type="number" step="0.0001" className="input pr-9" placeholder="Qtd" value={it.quantidade} onChange={(e) => setItem(i, 'quantidade', e.target.value)} />
                     {materialSelecionado && (

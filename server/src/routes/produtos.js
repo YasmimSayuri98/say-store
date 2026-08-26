@@ -33,6 +33,7 @@ router.get('/:id', async (req, res, next) => {
       materialNome: item.material.nome,
       unidadeSigla: item.material.unidade.sigla,
       quantidade: item.quantidade,
+      parte: item.parte || 'GERAL',
       custoUnitario: item.material.custoMedio,
       custoNoProduto: round4(item.quantidade * item.material.custoMedio),
     }));
@@ -197,24 +198,26 @@ router.post('/:id/remover-estoque', async (req, res, next) => {
 router.put('/:id/ficha', async (req, res, next) => {
   try {
     const produtoId = Number(req.params.id);
+    const PARTES = ['GERAL', 'CAPA', 'PAGINA'];
     const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
     // Validar materiais ativos e quantidades
     for (const it of itens) {
       if (!it.materialId) return res.status(400).json({ erro: 'Material obrigatório em item da ficha.' });
       if (!(Number(it.quantidade) > 0)) return res.status(400).json({ erro: 'Quantidade deve ser maior que zero na ficha.' });
+      if (it.parte && !PARTES.includes(it.parte)) return res.status(400).json({ erro: 'Parte da ficha inválida.' });
       const mat = await prisma.material.findUnique({ where: { id: Number(it.materialId) } });
       if (!mat) return res.status(400).json({ erro: 'Material inexistente na ficha.' });
       if (!mat.ativo) return res.status(400).json({ erro: `Material inativo não pode ser adicionado: ${mat.nome}.` });
     }
-    // Evitar duplicados
-    const ids = itens.map((i) => Number(i.materialId));
-    if (new Set(ids).size !== ids.length) return res.status(400).json({ erro: 'Material duplicado na ficha técnica.' });
+    // Evitar duplicados (mesmo material só pode repetir se estiver em partes diferentes)
+    const chaves = itens.map((i) => Number(i.materialId) + '|' + (i.parte || 'GERAL'));
+    if (new Set(chaves).size !== chaves.length) return res.status(400).json({ erro: 'Material duplicado na mesma parte da ficha técnica.' });
 
     await prisma.$transaction(async (tx) => {
       await tx.itemFichaTecnica.deleteMany({ where: { produtoId } });
       for (const it of itens) {
         await tx.itemFichaTecnica.create({
-          data: { produtoId, materialId: Number(it.materialId), quantidade: round4(it.quantidade) },
+          data: { produtoId, materialId: Number(it.materialId), quantidade: round4(it.quantidade), parte: it.parte || 'GERAL' },
         });
       }
       await recalcularCustoProduto(tx, produtoId);

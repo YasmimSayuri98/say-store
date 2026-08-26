@@ -92,7 +92,12 @@
       "Bash(node -e \"const p=require\\('./server/package.json'\\);console.log\\(p.scripts\\)\")",
       "Bash(node -e \"require\\('dotenv'\\).config\\(\\); process.stdout.write\\(process.env.APP_PASSWORD||''\\)\")",
       "Bash(node -e \"const fs=require\\('fs'\\);const l=fs.readFileSync\\('.env','utf8'\\).split\\(/\\\\r?\\\\n/\\).find\\(x=>x.startsWith\\('APP_PASSWORD='\\)\\);process.stdout.write\\(l.split\\('='\\)[1]||''\\)\")",
-      "Bash(node -c src/routes/dashboard.js)"
+      "Bash(node -c src/routes/dashboard.js)",
+      "WebFetch(domain:focusnfe.com.br)",
+      "WebFetch(domain:nuvemfiscal.com.br)",
+      "WebFetch(domain:www.nuvemfiscal.com.br)",
+      "WebFetch(domain:www.upseller.com)",
+      "Bash(xargs grep -A 12 \"CREATE TABLE \\\\\"ItemFichaTecnica\\\\\"\")"
     ]
   }
 }

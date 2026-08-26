@@ -162,11 +162,9 @@ export default function Produtos() {
               Produção estendida (leva mais tempo — o “personalizado” da Shopee, com prazo de envio maior)
             </label>
             {(editando.sku || '').toUpperCase().startsWith('LIV-FOT-PERS') && (
-              <div>
-                <label className="label">Gramas de página por álbum (g)</label>
-                <input type="number" step="0.1" className="input" value={editando.paginaGramas ?? ''} onChange={(e) => setEditando({ ...editando, paginaGramas: e.target.value })} placeholder="Ex.: 20" />
-                <p className="text-xs text-grafite-800/50 mt-1">Álbum: gramas de filamento das páginas, descontadas ao marcar “Páginas” na produção (você escolhe a cor na hora).</p>
-              </div>
+              <p className="text-xs bg-marca-50 border border-marca-100 rounded-lg px-3 py-2 text-grafite-800/70">
+                📖 <b>Álbum:</b> os materiais da <b>capa</b> e das <b>páginas</b> são definidos na <b>ficha técnica</b> (após salvar, abra o produto e marque cada material como Capa ou Páginas).
+              </p>
             )}
           </div>
           <div className="flex justify-end gap-2 mt-4">

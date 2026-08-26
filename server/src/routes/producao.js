@@ -3,7 +3,7 @@ const prisma = require('../prisma');
 const { round4 } = require('../utils/money');
 const { parseDataDia } = require('../utils/data');
 const { aplicarEmbalagens } = require('../services/embalagemService');
-const { marcarProduzido, desfazerProduzido } = require('../services/producaoEstoqueService');
+const { marcarProduzido, desfazerProduzido, descontarMateriais, estornarMateriais } = require('../services/producaoEstoqueService');
 const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
 const router = express.Router();
 
@@ -106,7 +106,10 @@ router.get('/', async (req, res, next) => {
         // Álbum (produção em duas partes)
         album,
         sku,
-        paginaGramas: it.produto ? it.produto.paginaGramas : 0,
+        // Gramas das páginas = soma dos itens da ficha marcados como "PAGINA" (por unidade)
+        paginaGramas: it.produto ? round4((it.produto.itensFicha || []).filter((fi) => fi.parte === 'PAGINA').reduce((s, fi) => s + fi.quantidade, 0)) : 0,
+        // Tem material de capa cadastrado na ficha? (para a UI saber se a capa desconta)
+        capaTemMaterial: it.produto ? (it.produto.itensFicha || []).some((fi) => fi.parte === 'CAPA') : false,
         capaFeita: it.capaFeita,
         paginasFeitas: it.paginasFeitas,
         paginaFilamentoId: it.paginaFilamentoId,
@@ -323,15 +326,30 @@ async function sincronizarProduzidoAlbum(tx, itemId) {
   }
 }
 
-// Álbum — CAPA (cor do SKU): apenas check visual, não desconta estoque.
+// Álbum — CAPA (cor do SKU): desconta os materiais da parte "CAPA" da ficha técnica (fixos por SKU).
+// Se o produto não tem itens de capa na ficha, a capa vira apenas um check visual (sem estoque).
 router.post('/:itemId/capa', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
     const feita = req.body.feita !== false; // default: marcar
     await prisma.$transaction(async (tx) => {
-      const item = await tx.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+      const item = await tx.itemPedidoPlataforma.findUnique({
+        where: { id: itemId },
+        include: { produto: { include: { itensFicha: { include: { material: true } } } }, pedido: { include: { plataforma: true } } },
+      });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
+      if (feita && item.capaFeita) return; // idempotente
+      if (!feita && !item.capaFeita) return;
       if (item.finalizado && !feita) throw Object.assign(new Error('Desfaça o "finalizado" antes de desmarcar a capa.'), { status: 400 });
+
+      const capaItens = (item.produto ? item.produto.itensFicha : []).filter((fi) => fi.parte === 'CAPA');
+      if (capaItens.length > 0) {
+        const produtoCapa = { ...item.produto, itensFicha: capaItens };
+        const motivo = `${feita ? '' : 'Estorno '}Capa do álbum — pedido ${item.pedido.plataforma.nome} ${item.pedido.numeroPedido}`;
+        if (feita) await descontarMateriais(tx, produtoCapa, item.quantidade, motivo, { itemPedidoPlataformaId: item.id });
+        else await estornarMateriais(tx, produtoCapa, item.quantidade, motivo, { itemPedidoPlataformaId: item.id });
+      }
+
       await tx.itemPedidoPlataforma.update({ where: { id: itemId }, data: { capaFeita: feita, capaFeitaEm: feita ? new Date() : null } });
       await sincronizarProduzidoAlbum(tx, itemId);
     });
@@ -342,7 +360,12 @@ router.post('/:itemId/capa', async (req, res, next) => {
   }
 });
 
-// Álbum — PÁGINAS: escolhe o filamento usado e desconta os gramas configurados no produto (paginaGramas).
+// Soma dos gramas da parte "PAGINA" da ficha (por unidade do produto).
+function gramasPaginaDe(produto) {
+  return round4((produto && produto.itensFicha ? produto.itensFicha : []).filter((fi) => fi.parte === 'PAGINA').reduce((s, fi) => s + fi.quantidade, 0));
+}
+
+// Álbum — PÁGINAS: escolhe o filamento usado e desconta os gramas definidos na parte "PAGINA" da ficha.
 router.post('/:itemId/paginas', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
@@ -351,7 +374,7 @@ router.post('/:itemId/paginas', async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       const item = await tx.itemPedidoPlataforma.findUnique({
         where: { id: itemId },
-        include: { produto: true, pedido: { include: { plataforma: true } } },
+        include: { produto: { include: { itensFicha: true } }, pedido: { include: { plataforma: true } } },
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.paginasFeitas) throw Object.assign(new Error('As páginas deste item já foram marcadas.'), { status: 409 });
@@ -360,8 +383,8 @@ router.post('/:itemId/paginas', async (req, res, next) => {
       const material = await tx.material.findUnique({ where: { id: filamentoId } });
       if (!material) throw Object.assign(new Error('Filamento não encontrado.'), { status: 404 });
 
-      // Gramas por página × quantidade de álbuns do item.
-      const gramas = round4((item.produto.paginaGramas || 0) * item.quantidade);
+      // Gramas de página (da ficha) × quantidade de álbuns do item.
+      const gramas = round4(gramasPaginaDe(item.produto) * item.quantidade);
       if (gramas > 0) {
         if (material.quantidade < gramas) {
           throw Object.assign(new Error(`Estoque insuficiente de ${material.nome}: disponível ${material.quantidade}g, necessário ${gramas}g.`), { status: 409 });
@@ -399,13 +422,13 @@ router.post('/:itemId/paginas/desfazer', async (req, res, next) => {
     await prisma.$transaction(async (tx) => {
       const item = await tx.itemPedidoPlataforma.findUnique({
         where: { id: itemId },
-        include: { produto: true, pedido: { include: { plataforma: true } } },
+        include: { produto: { include: { itensFicha: true } }, pedido: { include: { plataforma: true } } },
       });
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (!item.paginasFeitas) throw Object.assign(new Error('As páginas ainda não foram marcadas.'), { status: 400 });
       if (item.finalizado) throw Object.assign(new Error('Desfaça o "finalizado" antes de desfazer as páginas.'), { status: 400 });
 
-      const gramas = round4((item.produto ? item.produto.paginaGramas : 0) * item.quantidade);
+      const gramas = round4(gramasPaginaDe(item.produto) * item.quantidade);
       if (gramas > 0 && item.paginaFilamentoId) {
         const material = await tx.material.findUnique({ where: { id: item.paginaFilamentoId } });
         if (material) {

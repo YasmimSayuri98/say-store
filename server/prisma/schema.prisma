@@ -136,9 +136,10 @@ model ItemFichaTecnica {
   produtoId         Int
   materialId        Int
   quantidade        Float
+  parte             String   @default("GERAL")  // GERAL | CAPA | PAGINA (álbuns dividem a ficha em capa/páginas)
   produto  Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
   material Material @relation(fields: [materialId], references: [id])
-  @@unique([produtoId, materialId])
+  @@unique([produtoId, materialId, parte])
 }
 
 model RegistroEnvio {
