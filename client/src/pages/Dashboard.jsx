@@ -877,6 +877,7 @@ export default function Dashboard() {
 
       <div className="flex flex-wrap gap-2 mb-8">
         <Atalho to="/entradas" label="Registrar entrada" icone="M12 5v14M5 12l7 7 7-7" />
+        <Atalho to="/devolucoes" label="Registrar devolução" icone="M3 10h11a4 4 0 010 8h-3M3 10l4-4M3 10l4 4" />
         <Atalho to="/produtos" label="Cadastrar produto" icone="M12 5v14M5 12h14" />
         <Atalho to="/materiais" label="Cadastrar material" icone="M12 5v14M5 12h14" />
       </div>
