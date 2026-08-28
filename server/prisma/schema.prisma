@@ -101,6 +101,22 @@ model Produto {
   itensEnvio   ItemRegistroEnvio[]
   precos       PrecoProduto[]
   itensPedidosPlataforma ItemPedidoPlataforma[]
+  devolucoes   Devolucao[]
+}
+
+// Devolução de produto que voltou ao vendedor. Se aptoEstoque, a quantidade volta ao estoque
+// de produto pronto (Produto.estoque).
+model Devolucao {
+  id              Int      @id @default(autoincrement())
+  produtoId       Int?
+  quantidade      Float    @default(1)
+  aptoEstoque     Boolean  @default(false)  // produto está apto a voltar ao estoque?
+  retornouEstoque Boolean  @default(false)  // realmente somou ao estoque de produto pronto
+  numeroPedido    String?  // pedido de origem (opcional)
+  motivo          String?
+  criadoEm        DateTime @default(now())
+
+  produto Produto? @relation(fields: [produtoId], references: [id])
 }
 
 model PlataformaVenda {

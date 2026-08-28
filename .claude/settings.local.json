@@ -97,7 +97,9 @@
       "WebFetch(domain:nuvemfiscal.com.br)",
       "WebFetch(domain:www.nuvemfiscal.com.br)",
       "WebFetch(domain:www.upseller.com)",
-      "Bash(xargs grep -A 12 \"CREATE TABLE \\\\\"ItemFichaTecnica\\\\\"\")"
+      "Bash(xargs grep -A 12 \"CREATE TABLE \\\\\"ItemFichaTecnica\\\\\"\")",
+      "Bash(node _dev_test.js)",
+      "Bash(rm -f _dev_test.js)"
     ]
   }
 }
