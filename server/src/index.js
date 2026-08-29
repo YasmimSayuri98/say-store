@@ -37,6 +37,7 @@ app.use('/api/embalagens', require('./routes/embalagens'));
 app.use('/api/notas', require('./routes/notas'));
 app.use('/api/tarefas', require('./routes/tarefas'));
 app.use('/api/devolucoes', require('./routes/devolucoes'));
+app.use('/api/perdas', require('./routes/perdas'));
 
 // Handler de erros
 app.use((err, req, res, next) => {

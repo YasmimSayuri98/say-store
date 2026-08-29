@@ -57,6 +57,14 @@ router.get('/', async (req, res, next) => {
       for (const it of e.itens) produtosEnviadosPeriodo += it.quantidade;
     }
 
+    // Perdas do período (teste e erro de produção), em valor e quantidade de lançamentos.
+    const perdasPeriodo = await prisma.perda.findMany({ where: { criadoEm: { gte: de, lte: ate } } });
+    let perdaTesteValor = 0, perdaErroValor = 0, perdaTesteQtd = 0, perdaErroQtd = 0;
+    for (const pl of perdasPeriodo) {
+      if (pl.tipo === 'TESTE') { perdaTesteValor = round4(perdaTesteValor + pl.custoTotal); perdaTesteQtd++; }
+      else { perdaErroValor = round4(perdaErroValor + pl.custoTotal); perdaErroQtd++; }
+    }
+
     const ultimasMovimentacoes = await prisma.movimentacaoEstoque.findMany({
       include: { material: { include: { unidade: true } } }, orderBy: { criadoEm: 'desc' }, take: 8,
     });
@@ -90,6 +98,11 @@ router.get('/', async (req, res, next) => {
         taxas: taxasPeriodo,
         custoMateriais: custoMateriaisPeriodo,
         produtosEnviados: produtosEnviadosPeriodo,
+        perdaTesteValor,
+        perdaErroValor,
+        perdaTotalValor: round4(perdaTesteValor + perdaErroValor),
+        perdaTesteQtd,
+        perdaErroQtd,
       },
       // Compat: mês atual (mantidos para não quebrar chamadas antigas)
       custoMateriaisMes: custoMateriaisPeriodo,

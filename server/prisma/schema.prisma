@@ -50,6 +50,23 @@ model Material {
   itensFicha  ItemFichaTecnica[]
   itensEmbalagem ItemEmbalagem[]
   ajustes     AjusteEstoque[]
+  perdas      Perda[]
+}
+
+// Perda de material: gasto em teste de produto ou erro de produção. Desconta o material do estoque.
+model Perda {
+  id               Int      @id @default(autoincrement())
+  tipo             String   // TESTE | ERRO_PRODUCAO
+  produtoId        Int?     // quando a perda é de um produto cadastrado
+  nomeProdutoTeste String?  // quando é um produto não cadastrado / teste
+  materialId       Int
+  quantidade       Float    // quantidade de material gasta (na unidade do material)
+  custoTotal       Float    @default(0)  // snapshot: quantidade × custoMedio do material
+  motivo           String?
+  criadoEm         DateTime @default(now())
+
+  produto  Produto?  @relation(fields: [produtoId], references: [id])
+  material Material  @relation(fields: [materialId], references: [id])
 }
 
 model FilamentoDetalhe {
@@ -102,6 +119,7 @@ model Produto {
   precos       PrecoProduto[]
   itensPedidosPlataforma ItemPedidoPlataforma[]
   devolucoes   Devolucao[]
+  perdas       Perda[]
 }
 
 // Devolução de produto que voltou ao vendedor. Se aptoEstoque, a quantidade volta ao estoque

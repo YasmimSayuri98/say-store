@@ -873,6 +873,12 @@ export default function Dashboard() {
         <Estatistica titulo="Lucro líquido" valor={moeda(d.periodo?.lucro || 0)} cor={(d.periodo?.lucro || 0) >= 0 ? 'text-green-700' : 'text-red-600'} destaque sub={`Taxas: ${moeda(d.periodo?.taxas || 0)}`} />
         <Estatistica titulo="Produtos enviados" valor={numero(d.periodo?.produtosEnviados || 0)} />
         <Estatistica titulo="Custo de materiais" valor={moeda(d.periodo?.custoMateriais || 0)} />
+        <Estatistica
+          titulo="Perdas (teste / erro)"
+          valor={moeda(d.periodo?.perdaTotalValor || 0)}
+          cor={(d.periodo?.perdaTotalValor || 0) > 0 ? 'text-red-600' : 'text-grafite-900'}
+          sub={`Teste: ${moeda(d.periodo?.perdaTesteValor || 0)} · Erro: ${moeda(d.periodo?.perdaErroValor || 0)}`}
+        />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-8">
