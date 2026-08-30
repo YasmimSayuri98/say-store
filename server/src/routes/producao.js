@@ -237,7 +237,9 @@ router.post('/:itemId/desfazer', async (req, res, next) => {
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (!item.produzido) throw Object.assign(new Error('Este item ainda não foi marcado como produzido.'), { status: 400 });
       if (item.embalado) throw Object.assign(new Error('Desfaça o "embalado" antes de desfazer o "produzido".'), { status: 400 });
+      if (item.finalizado) throw Object.assign(new Error('Desfaça o "finalizado" antes de desfazer o "produzido".'), { status: 400 });
       if (!item.produto) throw Object.assign(new Error('Produto vinculado não encontrado; não é possível desfazer automaticamente.'), { status: 400 });
+      if (isAlbumSku(item.produto.sku)) throw Object.assign(new Error('Álbum: desmarque "Capa" e/ou "Páginas" para desfazer a produção.'), { status: 400 });
 
       // Devolve ao estoque de produto (se consumiu de lá) ou estorna os materiais (se descontou material).
       await desfazerProduzido(tx, item, item.produto);

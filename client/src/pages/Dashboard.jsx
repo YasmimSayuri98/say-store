@@ -250,7 +250,7 @@ function BotaoFoto({ it, onFoto }) {
   );
 }
 
-function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir, onCapa, onPaginas, onDesfazerPaginas, onFoto, onEtiqueta }) {
+function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir, onCapa, onPaginas, onDesfazerPaginas, onFoto, onEtiqueta, onDesfazerProduzir, onDesfazerFinalizar }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
@@ -324,12 +324,13 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                                   </label>
                                 </>
                               ) : (
-                                <label className={chkCls(!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente)}>
+                                <label className={chkCls((!it.produzido && !it.cobertoPorEstoque && !it.semVinculo && it.estoqueSuficiente) || (it.produzido && !it.finalizado))}>
                                   <input
                                     type="checkbox"
                                     checked={it.produzido || it.cobertoPorEstoque}
-                                    disabled={it.produzido || it.cobertoPorEstoque || it.semVinculo || !it.estoqueSuficiente}
-                                    onChange={() => onProduzir(it)}
+                                    disabled={it.semVinculo || it.cobertoPorEstoque || (!it.produzido && !it.estoqueSuficiente) || (it.produzido && it.finalizado)}
+                                    onChange={() => it.produzido ? onDesfazerProduzir(it) : onProduzir(it)}
+                                    title={it.produzido && it.finalizado ? 'Desfaça o "Finalizado" antes' : (it.produzido ? 'Clique para desmarcar' : '')}
                                   />
                                   {it.cobertoPorEstoque && !it.produzido ? 'Produzido (do estoque)' : 'Produzido'}
                                 </label>
@@ -339,10 +340,12 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                                 const producaoOk = it.album ? (it.capaFeita && it.paginasFeitas) : (it.produzido || it.cobertoPorEstoque);
                                 const fotoOk = !it.personalizado || !!it.fotoStatus;
                                 const podeFinalizar = !it.finalizado && !it.semVinculo && producaoOk && fotoOk;
+                                const podeDesfazer = it.finalizado && !it.embalado;
                                 return (
-                                  <label className={chkCls(podeFinalizar)}>
-                                    <input type="checkbox" checked={it.finalizado} disabled={!podeFinalizar && !it.finalizado}
-                                      onChange={() => onFinalizar(it)} />
+                                  <label className={chkCls(podeFinalizar || podeDesfazer)}>
+                                    <input type="checkbox" checked={it.finalizado} disabled={!podeFinalizar && !podeDesfazer}
+                                      onChange={() => it.finalizado ? onDesfazerFinalizar(it) : onFinalizar(it)}
+                                      title={it.finalizado ? 'Clique para desmarcar' : ''} />
                                     Finalizado
                                   </label>
                                 );
@@ -770,6 +773,21 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  async function desfazerProduzir(item) {
+    try {
+      await api.post(`/producao/${item.id}/desfazer`, {});
+      toast.sucesso('Produção desfeita (material estornado).');
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
+  async function desfazerFinalizar(item) {
+    try {
+      await api.post(`/producao/${item.id}/finalizar/desfazer`, {});
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+
   async function produzir(item) {
     try {
       await api.post(`/producao/${item.id}/produzir`, {});
@@ -893,7 +911,8 @@ export default function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-5">
         <NotasCard />
         <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir}
-          onCapa={marcarCapa} onPaginas={(it) => setPaginasModal(it)} onDesfazerPaginas={desfazerPaginas} onFoto={(it) => setFotoModal(it)} onEtiqueta={marcarEtiqueta} />
+          onCapa={marcarCapa} onPaginas={(it) => setPaginasModal(it)} onDesfazerPaginas={desfazerPaginas} onFoto={(it) => setFotoModal(it)} onEtiqueta={marcarEtiqueta}
+          onDesfazerProduzir={desfazerProduzir} onDesfazerFinalizar={desfazerFinalizar} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviarPedido={setEnviandoPedido} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">
