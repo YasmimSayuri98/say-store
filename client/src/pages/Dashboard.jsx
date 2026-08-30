@@ -362,6 +362,8 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                           <div className="flex items-center gap-2 shrink-0">
                             {it.semVinculo ? (
                               <span className="badge badge-sem">Sem vínculo (SKU {it.skuPlataforma})</span>
+                            ) : it.produzido ? (
+                              <span className="badge badge-normal">✓ Produzido</span>
                             ) : it.cobertoPorEstoque ? (
                               <span className="badge badge-normal" title={`${numero(it.estoqueProduto)} em estoque`}>✓ Tem estoque</span>
                             ) : !it.estoqueSuficiente ? (
