@@ -27,12 +27,18 @@ export default function Materiais() {
     api.get('/unidades').then(setUnidades);
   }, []);
 
-  function novo() { setEditando({ nome: '', categoriaId: '', unidadeId: '', quantidade: 0, quantidadeMinima: 0, custoMedio: 0, observacoes: '', filamento: null }); setModalAberto(true); }
+  function novo() { setEditando({ nome: '', categoriaId: '', unidadeId: '', quantidade: '', valorTotal: '', quantidadeMinima: 0, custoMedio: 0, observacoes: '', filamento: null }); setModalAberto(true); }
   function editar(m) { setEditando({ ...m, categoriaId: m.categoriaId, unidadeId: m.unidadeId, filamento: m.filamento || null }); setModalAberto(true); }
 
   async function salvar() {
     try {
       const body = { ...editando };
+      if (!editando.id) {
+        // Novo material: o custo por unidade é calculado a partir do valor total pago ÷ quantidade.
+        const qtd = Number(editando.quantidade) || 0;
+        const total = Number(editando.valorTotal) || 0;
+        body.custoMedio = qtd > 0 ? total / qtd : 0;
+      }
       if (editando.id) await api.put('/materiais/' + editando.id, body);
       else await api.post('/materiais', body);
       toast.sucesso('Material salvo com sucesso.');
@@ -129,12 +135,22 @@ export default function Materiais() {
             {!editando.id && (
               <>
                 <div>
-                  <label className="label">Quantidade inicial</label>
-                  <input type="number" className="input" value={editando.quantidade} onChange={(e) => setEditando({ ...editando, quantidade: e.target.value })} />
+                  <label className="label">Quantidade inicial{unidadeSel ? ` (${unidadeSel.sigla})` : ''}</label>
+                  <input type="number" step="0.0001" className="input" value={editando.quantidade} onChange={(e) => setEditando({ ...editando, quantidade: e.target.value })} placeholder="Ex.: 1000" />
                 </div>
                 <div>
-                  <label className="label">Custo médio inicial (R$)</label>
-                  <input type="number" step="0.0001" className="input" value={editando.custoMedio} onChange={(e) => setEditando({ ...editando, custoMedio: e.target.value })} />
+                  <label className="label">Valor total pago (R$)</label>
+                  <input type="number" step="0.01" className="input" value={editando.valorTotal} onChange={(e) => setEditando({ ...editando, valorTotal: e.target.value })} placeholder="Ex.: 90,00" />
+                </div>
+                <div className="md:col-span-2">
+                  {Number(editando.quantidade) > 0 && Number(editando.valorTotal) > 0 ? (
+                    <div className="text-sm bg-marca-50 border border-marca-100 rounded-lg px-3 py-2 text-grafite-800/80">
+                      Valor unitário calculado: <b className="text-marca-700">{moeda4((Number(editando.valorTotal) || 0) / (Number(editando.quantidade) || 1))}</b>
+                      {unidadeSel ? ` por ${unidadeSel.sigla}` : ' por unidade'}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-grafite-800/50">Informe a quantidade e o valor total — o sistema calcula o custo por {unidadeSel?.sigla || 'unidade'} automaticamente.</p>
+                  )}
                 </div>
               </>
             )}
