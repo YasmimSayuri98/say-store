@@ -20,13 +20,25 @@ export default function PrecoSugerido() {
   const [comprador, setComprador] = useState({ nome: '', contato: '', email: '', validadeDias: '7', pagamento: '', obs: '', meuContato: '' });
   const toast = useToast();
 
+  const [matriz, setMatriz] = useState([]); // produtos com preços já cadastrados por plataforma
+
   useEffect(() => {
     api.get('/produtos?ativo=true').then(setProdutos).catch(() => {});
     api.get('/plataformas?ativo=true').then(setPlataformas).catch(() => {});
+    api.get('/precificacao').then((d) => setMatriz(d.produtos || [])).catch(() => {});
   }, []);
 
   const produto = produtos.find((p) => String(p.id) === String(produtoId));
   const plataforma = plataformas.find((p) => String(p.id) === String(plataformaId));
+
+  // Preço de venda já cadastrado do produto na plataforma selecionada (0 se não houver).
+  function precoCadastrado(prodId, platId) {
+    const p = matriz.find((x) => String(x.produtoId) === String(prodId));
+    if (!p) return 0;
+    const pl = (p.plataformas || []).find((x) => String(x.plataformaId) === String(platId));
+    return pl ? Number(pl.precoVenda) || 0 : 0;
+  }
+  const precoCadUnitario = produtoId && plataformaId && plataformaId !== 'particular' ? precoCadastrado(produtoId, plataformaId) : 0;
   const custoMateriais = produto ? Number(produto.custoAtualMateriais) || 0 : 0;
   const custoFinal = custoMateriais + (Number(custosExtras) || 0);
 
@@ -225,6 +237,12 @@ export default function PrecoSugerido() {
               <div>
                 <label className="label">Preço de venda / un (R$) *</label>
                 <input type="number" step="0.01" className="input" value={precoUnitAtacado} onChange={(e) => setPrecoUnitAtacado(e.target.value)} placeholder="0,00" />
+                {precoCadUnitario > 0 && (
+                  <p className="text-xs text-grafite-800/60 mt-1">
+                    Preço cadastrado: <b className="text-grafite-900">{moeda(precoCadUnitario)}</b>
+                    <button className="text-marca-600 font-medium ml-2 hover:underline" onClick={() => setPrecoUnitAtacado(String(precoCadUnitario))}>usar</button>
+                  </p>
+                )}
               </div>
             </div>
             <div>
@@ -342,6 +360,10 @@ export default function PrecoSugerido() {
             <div className="input bg-marca-50 text-marca-700 font-semibold flex items-center">{produto ? moeda(custoFinal) : '—'}</div>
           </div>
         </div>
+
+        {precoCadUnitario > 0 && (
+          <p className="text-xs text-grafite-800/60">Preço já cadastrado nesta plataforma: <b className="text-grafite-900">{moeda(precoCadUnitario)}</b></p>
+        )}
 
         <div className="grid md:grid-cols-2 gap-4 items-end">
           <div>
