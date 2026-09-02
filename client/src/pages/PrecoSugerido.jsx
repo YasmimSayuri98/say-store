@@ -162,13 +162,15 @@ export default function PrecoSugerido() {
   }
 
   // Orçamento de atacado: taxa calculada pela FAIXA do valor TOTAL do pedido (somatória).
+  // "Particular" (venda direta) = sem taxa de plataforma; lucro = preço − custo da ficha.
+  const ehParticular = plataformaId === 'particular';
   const qtd = Number(qtdAtacado) || 0;
   const precoUnit = Number(precoUnitAtacado) || 0;
   const totalVenda = precoUnit * qtd;
   const custoTotalAtacado = custoFinal * qtd;
   let atacado = null;
-  if (plataforma && qtd > 0 && precoUnit > 0) {
-    const { perc, fixo } = taxaDe(plataforma, totalVenda); // faixa pelo total
+  if ((ehParticular || plataforma) && qtd > 0 && precoUnit > 0) {
+    const { perc, fixo } = ehParticular ? { perc: 0, fixo: 0 } : taxaDe(plataforma, totalVenda); // faixa pelo total
     const taxas = totalVenda * perc + fixo;
     const lucro = totalVenda - taxas - custoTotalAtacado;
     atacado = {
@@ -206,6 +208,7 @@ export default function PrecoSugerido() {
                 <label className="label">Plataforma *</label>
                 <select className="input" value={plataformaId} onChange={(e) => setPlataformaId(e.target.value)}>
                   <option value="">Selecione</option>
+                  <option value="particular">🤝 Particular (venda direta — sem taxa)</option>
                   {plataformas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
               </div>
@@ -229,7 +232,9 @@ export default function PrecoSugerido() {
               <input type="number" step="0.01" className="input" value={custosExtras} onChange={(e) => setCustosExtras(e.target.value)} placeholder="0,00" />
             </div>
             <p className="text-xs text-grafite-800/50">
-              A taxa da plataforma é calculada pela faixa de preço do <b>valor total</b> do pedido (somatória), não por unidade.
+              {ehParticular
+                ? <>Pedido <b>particular</b>: sem taxa de plataforma — o lucro é o preço menos o custo da ficha.</>
+                : <>A taxa da plataforma é calculada pela faixa de preço do <b>valor total</b> do pedido (somatória), não por unidade.</>}
             </p>
           </div>
 
@@ -239,8 +244,8 @@ export default function PrecoSugerido() {
               <div className="text-4xl font-display font-extrabold text-grafite-900 mb-4">{moeda(atacado.total)}</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div>
-                  <div className="text-grafite-800/50 text-xs">Taxas ({numero(atacado.perc)}% + {moeda(atacado.fixo)})</div>
-                  <div className="font-semibold text-amber-600">{moeda(atacado.taxas)}</div>
+                  <div className="text-grafite-800/50 text-xs">{ehParticular ? 'Taxas (venda direta)' : `Taxas (${numero(atacado.perc)}% + ${moeda(atacado.fixo)})`}</div>
+                  <div className="font-semibold text-amber-600">{ehParticular ? 'Sem taxa' : moeda(atacado.taxas)}</div>
                 </div>
                 <div>
                   <div className="text-grafite-800/50 text-xs">Custo total</div>
