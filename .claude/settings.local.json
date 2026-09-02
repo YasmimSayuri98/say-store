@@ -101,7 +101,8 @@
       "Bash(node _dev_test.js)",
       "Bash(rm -f _dev_test.js)",
       "Bash(node _perda_test.js)",
-      "Bash(rm -f _perda_test.js)"
+      "Bash(rm -f _perda_test.js)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('deps',p.dependencies\\);console.log\\('dev',p.devDependencies\\)\")"
     ]
   }
 }

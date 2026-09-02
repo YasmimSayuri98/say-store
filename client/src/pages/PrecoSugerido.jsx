@@ -16,6 +16,8 @@ export default function PrecoSugerido() {
   // Orçamento de atacado
   const [qtdAtacado, setQtdAtacado] = useState('');
   const [precoUnitAtacado, setPrecoUnitAtacado] = useState('');
+  const [orcamentoAberto, setOrcamentoAberto] = useState(false);
+  const [comprador, setComprador] = useState({ nome: '', contato: '', email: '', validadeDias: '7', pagamento: '', obs: '', meuContato: '' });
   const toast = useToast();
 
   useEffect(() => {
@@ -41,6 +43,122 @@ export default function PrecoSugerido() {
     if (preco == null) return toast.erro('Taxas + margem passam de 100%. Reduza a margem alvo.');
     const fin = financeiro(preco, custoFinal, plataforma);
     setResultado({ preco, ...fin });
+  }
+
+  // Escapa texto do usuário para inserir com segurança no HTML do orçamento.
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function gerarOrcamento() {
+    const q = Number(qtdAtacado) || 0;
+    const pu = Number(precoUnitAtacado) || 0;
+    if (!produto) return toast.erro('Selecione o produto no orçamento.');
+    if (!(q > 0) || !(pu > 0)) return toast.erro('Informe a quantidade e o preço unitário.');
+    if (!comprador.nome.trim()) return toast.erro('Informe o nome do cliente.');
+
+    const total = pu * q;
+    const agora = new Date();
+    const num = 'ORC-' + agora.toISOString().slice(0, 10).replace(/-/g, '') + '-' + String(agora.getHours()).padStart(2, '0') + String(agora.getMinutes()).padStart(2, '0');
+    const dataFmt = agora.toLocaleDateString('pt-BR');
+    const dias = Number(comprador.validadeDias) || 7;
+    const validade = new Date(agora.getTime() + dias * 86400000).toLocaleDateString('pt-BR');
+
+    const linhaOpc = (label, val) => val && String(val).trim()
+      ? `<tr><td class="k">${esc(label)}</td><td>${esc(val)}</td></tr>` : '';
+
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>${esc(num)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #1C1B1A; font-size: 13px; }
+  .page { max-width: 760px; margin: 0 auto; padding: 32px 40px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #E8590C; padding-bottom: 18px; }
+  .brand { font-size: 26px; font-weight: 800; color: #E8590C; letter-spacing: -0.5px; }
+  .brand small { display: block; font-size: 11px; font-weight: 600; color: #7A2D0B; letter-spacing: 3px; text-transform: uppercase; }
+  .doc { text-align: right; }
+  .doc h1 { margin: 0; font-size: 20px; letter-spacing: 4px; color: #2A2825; }
+  .doc .meta { font-size: 12px; color: #6b6660; margin-top: 4px; line-height: 1.5; }
+  .cliente { margin: 24px 0 8px; }
+  .cliente .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #E8590C; font-weight: 700; margin-bottom: 6px; }
+  table.info { border-collapse: collapse; }
+  table.info td { padding: 2px 0; font-size: 13px; }
+  table.info td.k { color: #6b6660; padding-right: 14px; white-space: nowrap; }
+  table.itens { width: 100%; border-collapse: collapse; margin-top: 22px; }
+  table.itens thead th { background: #E8590C; color: #fff; text-align: left; padding: 10px 12px; font-size: 12px; letter-spacing: 0.5px; }
+  table.itens thead th.r, table.itens tbody td.r { text-align: right; }
+  table.itens tbody td { padding: 12px; border-bottom: 1px solid #EFEBE5; }
+  .totais { margin-top: 8px; display: flex; justify-content: flex-end; }
+  .totais .box { min-width: 260px; }
+  .totais .row { display: flex; justify-content: space-between; padding: 6px 12px; }
+  .totais .grand { background: #FFF4ED; border: 1px solid #FFC9A8; border-radius: 8px; margin-top: 6px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .totais .grand .lbl { font-weight: 700; color: #2A2825; }
+  .totais .grand .val { font-size: 22px; font-weight: 800; color: #C4460A; }
+  .cond { margin-top: 26px; border-top: 1px solid #EFEBE5; padding-top: 16px; font-size: 12px; color: #4b4741; line-height: 1.7; }
+  .cond b { color: #2A2825; }
+  .foot { margin-top: 28px; text-align: center; font-size: 11px; color: #9a948c; border-top: 1px dashed #E2DCD3; padding-top: 14px; }
+  @media print { .page { padding: 12px 8px; } }
+</style></head>
+<body><div class="page">
+  <div class="top">
+    <div class="brand">Say Store<small>3D Personalizados</small></div>
+    <div class="doc">
+      <h1>ORÇAMENTO</h1>
+      <div class="meta">Nº ${esc(num)}<br>Data: ${dataFmt}<br>Válido até: <b>${validade}</b></div>
+    </div>
+  </div>
+
+  <div class="cliente">
+    <div class="lbl">Para</div>
+    <table class="info">
+      <tr><td class="k">Cliente</td><td><b>${esc(comprador.nome)}</b></td></tr>
+      ${linhaOpc('Contato', comprador.contato)}
+      ${linhaOpc('E-mail', comprador.email)}
+    </table>
+  </div>
+
+  <table class="itens">
+    <thead><tr><th>Produto</th><th class="r">Qtde</th><th class="r">Valor unit.</th><th class="r">Total</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>${esc(produto.nome)}${produto.sku ? ` <span style="color:#9a948c;font-size:11px">(${esc(produto.sku)})</span>` : ''}</td>
+        <td class="r">${numero(q)}</td>
+        <td class="r">${moeda(pu)}</td>
+        <td class="r">${moeda(total)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="totais"><div class="box">
+    <div class="row"><span>Subtotal</span><span>${moeda(total)}</span></div>
+    <div class="grand"><span class="lbl">Total do orçamento</span><span class="val">${moeda(total)}</span></div>
+  </div></div>
+
+  <div class="cond">
+    <b>Condições</b><br>
+    Este orçamento é válido até <b>${validade}</b> (${dias} dias).<br>
+    ${comprador.pagamento && comprador.pagamento.trim() ? `Forma de pagamento: ${esc(comprador.pagamento)}.<br>` : ''}
+    ${comprador.obs && comprador.obs.trim() ? `Observações: ${esc(comprador.obs)}<br>` : ''}
+  </div>
+
+  <div class="foot">
+    ${comprador.meuContato && comprador.meuContato.trim() ? esc(comprador.meuContato) + ' · ' : ''}Say Store — obrigada pela preferência! 🧡
+  </div>
+</div></body></html>`;
+
+    imprimirHtml(html);
+  }
+
+  // Renderiza o orçamento num iframe oculto e abre a impressão (Salvar como PDF).
+  function imprimirHtml(html) {
+    const iframe = document.createElement('iframe');
+    Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+    iframe.srcdoc = html;
+    iframe.onload = () => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
+      setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ignore */ } }, 1500);
+    };
+    document.body.appendChild(iframe);
   }
 
   // Orçamento de atacado: taxa calculada pela FAIXA do valor TOTAL do pedido (somatória).
@@ -136,6 +254,51 @@ export default function PrecoSugerido() {
                   <div className="text-grafite-800/50 text-xs">Lucro / un · margem</div>
                   <div className={'font-semibold ' + (atacado.lucro >= 0 ? 'text-green-700' : 'text-red-600')}>{moeda(atacado.lucroUnit)} · {atacado.margem.toFixed(1)}%</div>
                 </div>
+              </div>
+
+              <div className="border-t border-base-200 mt-4 pt-4">
+                {!orcamentoAberto ? (
+                  <button className="btn btn-secondary" onClick={() => setOrcamentoAberto(true)}>📄 Criar orçamento para o cliente</button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-grafite-800/50">Dados para o orçamento</div>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Nome do cliente / empresa *</label>
+                        <input className="input" value={comprador.nome} onChange={(e) => setComprador({ ...comprador, nome: e.target.value })} placeholder="Ex.: Maria Silva" />
+                      </div>
+                      <div>
+                        <label className="label">Contato (telefone / WhatsApp)</label>
+                        <input className="input" value={comprador.contato} onChange={(e) => setComprador({ ...comprador, contato: e.target.value })} placeholder="(00) 00000-0000" />
+                      </div>
+                      <div>
+                        <label className="label">E-mail (opcional)</label>
+                        <input className="input" value={comprador.email} onChange={(e) => setComprador({ ...comprador, email: e.target.value })} placeholder="cliente@email.com" />
+                      </div>
+                      <div>
+                        <label className="label">Validade do orçamento (dias)</label>
+                        <input type="number" min="1" className="input" value={comprador.validadeDias} onChange={(e) => setComprador({ ...comprador, validadeDias: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="label">Forma de pagamento (opcional)</label>
+                        <input className="input" value={comprador.pagamento} onChange={(e) => setComprador({ ...comprador, pagamento: e.target.value })} placeholder="Ex.: Pix, 50% adiantado" />
+                      </div>
+                      <div>
+                        <label className="label">Seu contato no orçamento (opcional)</label>
+                        <input className="input" value={comprador.meuContato} onChange={(e) => setComprador({ ...comprador, meuContato: e.target.value })} placeholder="Ex.: WhatsApp (00) 0000-0000" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="label">Observações (opcional)</label>
+                        <textarea className="input" rows={2} value={comprador.obs} onChange={(e) => setComprador({ ...comprador, obs: e.target.value })} placeholder="Ex.: prazo de produção de 7 dias úteis" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button className="btn btn-ghost" onClick={() => setOrcamentoAberto(false)}>Cancelar</button>
+                      <button className="btn btn-primary" onClick={gerarOrcamento}>Gerar orçamento (PDF)</button>
+                    </div>
+                    <p className="text-xs text-grafite-800/50">Ao clicar, abre a janela de impressão — escolha <b>“Salvar como PDF”</b> para baixar o documento e enviar ao cliente.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
