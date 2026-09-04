@@ -73,7 +73,7 @@ export default function Produtos() {
   }
   useEffect(() => { carregar(); }, [busca]);
 
-  function novo() { setEditando({ nome: '', sku: '', descricao: '', personalizado: false, producaoEstendida: false }); setModalAberto(true); }
+  function novo() { setEditando({ nome: '', sku: '', descricao: '', personalizado: false, producaoEstendida: false, origemMercadoria: '0', unidadeTributavel: 'UN' }); setModalAberto(true); }
   function editar(p) { setEditando({ ...p }); setModalAberto(true); }
 
   async function duplicar(p) {
@@ -166,6 +166,48 @@ export default function Produtos() {
                 📖 <b>Álbum:</b> os materiais da <b>capa</b> e das <b>páginas</b> são definidos na <b>ficha técnica</b> (após salvar, abra o produto e marque cada material como Capa ou Páginas).
               </p>
             )}
+
+            {/* Dados fiscais (NF-e) */}
+            <div className="border-t border-base-200 pt-3 mt-1">
+              <h3 className="font-display font-bold text-grafite-900 mb-1 text-sm">Dados fiscais (NF-e)</h3>
+              <p className="text-xs text-grafite-800/50 mb-3">Preencha com orientação do seu contador. Usados na emissão da nota fiscal.</p>
+              <div className="grid md:grid-cols-3 gap-3">
+                <div>
+                  <label className="label">NCM</label>
+                  <input className="input" value={editando.ncm || ''} onChange={(e) => setEditando({ ...editando, ncm: e.target.value })} placeholder="8 dígitos" />
+                </div>
+                <div>
+                  <label className="label">CFOP</label>
+                  <input className="input" value={editando.cfop || ''} onChange={(e) => setEditando({ ...editando, cfop: e.target.value })} placeholder="Ex.: 5102" />
+                </div>
+                <div>
+                  <label className="label">CSOSN</label>
+                  <input className="input" value={editando.csosn || ''} onChange={(e) => setEditando({ ...editando, csosn: e.target.value })} placeholder="Ex.: 102 / 500" />
+                </div>
+                <div>
+                  <label className="label">Origem</label>
+                  <select className="input" value={editando.origemMercadoria || '0'} onChange={(e) => setEditando({ ...editando, origemMercadoria: e.target.value })}>
+                    <option value="0">0 - Nacional</option>
+                    <option value="1">1 - Estrangeira (importação direta)</option>
+                    <option value="2">2 - Estrangeira (mercado interno)</option>
+                    <option value="3">3 - Nacional &gt; 40% importação</option>
+                    <option value="4">4 - Nacional (produção conforme legislação)</option>
+                    <option value="5">5 - Nacional &lt; 40% importação</option>
+                    <option value="6">6 - Estrangeira (imp. sem similar)</option>
+                    <option value="7">7 - Estrangeira (interno sem similar)</option>
+                    <option value="8">8 - Nacional (conteúdo importado &gt; 70%)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Unidade tributável</label>
+                  <input className="input" value={editando.unidadeTributavel || 'UN'} onChange={(e) => setEditando({ ...editando, unidadeTributavel: e.target.value })} placeholder="UN" />
+                </div>
+                <div>
+                  <label className="label">CEST (opcional)</label>
+                  <input className="input" value={editando.cest || ''} onChange={(e) => setEditando({ ...editando, cest: e.target.value })} placeholder="se aplicável" />
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <button className="btn btn-secondary" onClick={() => setModalAberto(false)}>Cancelar</button>

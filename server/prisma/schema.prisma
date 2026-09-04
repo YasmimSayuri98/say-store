@@ -110,6 +110,13 @@ model Produto {
   custosExtras        Float    @default(0)  // energia, mão de obra, embalagem não rastreada, etc.
   margemLucroAlvo     Float    @default(0)  // margem de lucro alvo (%) para sugerir preço
   paginaGramas        Float    @default(0)  // álbuns (SKU LIV-FOT-PERS): gramas de filamento das páginas, descontadas ao marcar "páginas"
+  // Dados fiscais (NF-e) — preencher com orientação do contador
+  ncm               String?  // Nomenclatura Comum do Mercosul (8 dígitos)
+  cfop              String?  // Código Fiscal de Operações (ex.: 5102)
+  origemMercadoria  String   @default("0")   // 0 = nacional; ver tabela de origem
+  csosn             String?  // Simples Nacional (ex.: 102, 500)
+  cest              String?  // opcional, quando aplicável
+  unidadeTributavel String   @default("UN")  // unidade comercial na nota
   ultimoCalculoCusto  DateTime?
   criadoEm            DateTime @default(now())
   atualizadoEm        DateTime @updatedAt

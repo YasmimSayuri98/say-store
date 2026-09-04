@@ -48,6 +48,19 @@ function validarProduto(b) {
   return erros;
 }
 
+// Normaliza os campos fiscais (NF-e) vindos do corpo da requisição.
+function camposFiscais(b) {
+  const t = (v) => (v != null && String(v).trim() ? String(v).trim() : null);
+  return {
+    ncm: t(b.ncm),
+    cfop: t(b.cfop),
+    origemMercadoria: t(b.origemMercadoria) || '0',
+    csosn: t(b.csosn),
+    cest: t(b.cest),
+    unidadeTributavel: t(b.unidadeTributavel) || 'UN',
+  };
+}
+
 router.post('/', async (req, res, next) => {
   try {
     const erros = validarProduto(req.body);
@@ -61,6 +74,7 @@ router.post('/', async (req, res, next) => {
         ativo: b.ativo != null ? !!b.ativo : true, personalizado: !!b.personalizado,
         producaoEstendida: !!b.producaoEstendida,
         paginaGramas: Number(b.paginaGramas) || 0,
+        ...camposFiscais(b),
       },
     });
     res.status(201).json(produto);
@@ -77,7 +91,7 @@ router.put('/:id', async (req, res, next) => {
     if (conflito) return res.status(409).json({ erro: 'Já existe outro produto com esse SKU.' });
     const produto = await prisma.produto.update({
       where: { id },
-      data: { nome: b.nome.trim(), sku: b.sku.trim(), descricao: b.descricao || null, personalizado: !!b.personalizado, producaoEstendida: !!b.producaoEstendida, paginaGramas: Number(b.paginaGramas) || 0 },
+      data: { nome: b.nome.trim(), sku: b.sku.trim(), descricao: b.descricao || null, personalizado: !!b.personalizado, producaoEstendida: !!b.producaoEstendida, paginaGramas: Number(b.paginaGramas) || 0, ...camposFiscais(b) },
     });
     res.json(produto);
   } catch (e) { next(e); }
@@ -119,6 +133,8 @@ router.post('/:id/duplicar', async (req, res, next) => {
           custosExtras: original.custosExtras,
           margemLucroAlvo: original.margemLucroAlvo,
           paginaGramas: original.paginaGramas,
+          ncm: original.ncm, cfop: original.cfop, origemMercadoria: original.origemMercadoria,
+          csosn: original.csosn, cest: original.cest, unidadeTributavel: original.unidadeTributavel,
           itensFicha: {
             create: original.itensFicha.map((it) => ({ materialId: it.materialId, quantidade: it.quantidade })),
           },
