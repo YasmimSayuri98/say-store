@@ -87,6 +87,9 @@ router.get('/', async (req, res, next) => {
         plataformaNome: it.pedido.plataforma.nome,
         prazoEnvio: it.pedido.prazoEnvio,
         statusPedido: it.pedido.status,
+        // Pipeline: emissão de nota -> etiqueta -> produção (status por pedido)
+        notaEmitida: it.pedido.notaEmitida,
+        etiquetaGerada: it.pedido.etiquetaGerada,
         produtoId: it.produtoId,
         produtoNome: it.produto ? it.produto.nome : null,
         skuPlataforma: it.skuPlataforma,
@@ -126,6 +129,59 @@ router.get('/', async (req, res, next) => {
     });
 
     res.json(resultado);
+  } catch (e) { next(e); }
+});
+
+// ---------- Pipeline: Emissão de notas -> Programação de envio (etiqueta) -> Produção ----------
+
+// Lote: emitir notas dos pedidos selecionados. Por enquanto marca como emitida; a emissão real
+// (gateway/SEFAZ) será plugada aqui depois. Só marca pedidos que ainda não têm nota.
+router.post('/lote/notas', async (req, res, next) => {
+  try {
+    const ids = (Array.isArray(req.body.pedidoIds) ? req.body.pedidoIds : []).map(Number).filter(Boolean);
+    if (ids.length === 0) return res.status(400).json({ erro: 'Selecione ao menos um pedido.' });
+    const r = await prisma.pedidoPlataforma.updateMany({
+      where: { id: { in: ids }, notaEmitida: false },
+      data: { notaEmitida: true, notaEmitidaEm: new Date() },
+    });
+    res.json({ processados: r.count });
+  } catch (e) { next(e); }
+});
+
+// Lote: gerar/imprimir etiquetas dos pedidos selecionados (pré-requisito: nota emitida).
+router.post('/lote/etiquetas', async (req, res, next) => {
+  try {
+    const ids = (Array.isArray(req.body.pedidoIds) ? req.body.pedidoIds : []).map(Number).filter(Boolean);
+    if (ids.length === 0) return res.status(400).json({ erro: 'Selecione ao menos um pedido.' });
+    const r = await prisma.pedidoPlataforma.updateMany({
+      where: { id: { in: ids }, notaEmitida: true, etiquetaGerada: false },
+      data: { etiquetaGerada: true, etiquetaGeradaEm: new Date() },
+    });
+    res.json({ processados: r.count });
+  } catch (e) { next(e); }
+});
+
+// Desfaz a nota de um pedido (correção de clique). Também volta a etiqueta, pois depende da nota.
+router.post('/pedido/:pedidoId/nota/desfazer', async (req, res, next) => {
+  try {
+    const pedidoId = Number(req.params.pedidoId);
+    await prisma.pedidoPlataforma.update({
+      where: { id: pedidoId },
+      data: { notaEmitida: false, notaEmitidaEm: null, etiquetaGerada: false, etiquetaGeradaEm: null },
+    });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// Desfaz a etiqueta de um pedido (volta para "Programação de envio").
+router.post('/pedido/:pedidoId/etiqueta/desfazer', async (req, res, next) => {
+  try {
+    const pedidoId = Number(req.params.pedidoId);
+    await prisma.pedidoPlataforma.update({
+      where: { id: pedidoId },
+      data: { etiquetaGerada: false, etiquetaGeradaEm: null },
+    });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

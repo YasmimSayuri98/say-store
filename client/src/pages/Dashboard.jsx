@@ -97,7 +97,7 @@ function NotasCard() {
   return (
     <div className="card lg:col-span-2">
       <div className="flex items-center justify-between mb-3">
-        <TituloBloco>📝 Notas / Afazeres</TituloBloco>
+        <TituloBloco>📝 Afazeres</TituloBloco>
         {pendentes > 0 && <span className="text-xs text-grafite-800/40">{pendentes} pendente{pendentes > 1 ? 's' : ''}</span>}
       </div>
 
@@ -250,12 +250,12 @@ function BotaoFoto({ it, onFoto }) {
   );
 }
 
-function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir, onCapa, onPaginas, onDesfazerPaginas, onFoto, onEtiqueta, onDesfazerProduzir, onDesfazerFinalizar }) {
+function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedido, onEditar, onExcluir, onCapa, onPaginas, onDesfazerPaginas, onFoto, onEtiqueta, onDesfazerProduzir, onDesfazerFinalizar, onDesfazerEtiqueta }) {
   const grupos = agruparPorPrazo(itens);
   return (
     <div className="card lg:col-span-2">
       <div className="flex items-center justify-between mb-4">
-        <TituloBloco>Pedidos</TituloBloco>
+        <TituloBloco>Produção</TituloBloco>
         <div className="flex items-center gap-3">
           <button className="text-xs font-semibold text-marca-600 hover:text-marca-700" onClick={onNovoPedido}>+ Pedido manual</button>
           <Link to="/plataformas" className="text-xs font-semibold text-marca-600 hover:text-marca-700">Configurar →</Link>
@@ -280,7 +280,12 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                           <span className="text-xs text-grafite-800/50 truncate">{cab.numeroPedido}</span>
                           {itensPedido.length > 1 && <span className="text-[10px] text-grafite-800/40">· {itensPedido.length} itens</span>}
                         </div>
-                        <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                          {onDesfazerEtiqueta && (
+                            <button type="button" className="text-xs text-grafite-800/40 hover:text-marca-600 px-1" title="Voltar para Programação de envio (desfazer etiqueta)" onClick={() => onDesfazerEtiqueta(cab.pedidoId)}>↩</button>
+                          )}
+                        </div>
                       </div>
                       {cab.observacao && (
                         <div className="px-3 pt-2">
@@ -640,6 +645,67 @@ function ModalEnviar({ pedido, onClose, onEnviado }) {
   );
 }
 
+// Etapa do pipeline com seleção múltipla (Emissão de notas / Programação de envio).
+// `grupos` = lista de pedidos (cada um é um array de itens do mesmo pedido).
+function SecaoLote({ titulo, ajuda, grupos, botaoLabel, onExecutar, onDesfazer, desfazerLabel }) {
+  const [sel, setSel] = useState(() => new Set());
+  const ids = grupos.map((g) => g[0].pedidoId);
+  const allSel = ids.length > 0 && ids.every((id) => sel.has(id));
+  const nSel = ids.filter((id) => sel.has(id)).length;
+  function toggle(id) { setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function toggleAll() { setSel(allSel ? new Set() : new Set(ids)); }
+  function exec() { const arr = ids.filter((id) => sel.has(id)); if (!arr.length) return; onExecutar(arr); setSel(new Set()); }
+
+  return (
+    <div className="card lg:col-span-2">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <TituloBloco>{titulo}</TituloBloco>
+        <span className="badge badge-baixo">{grupos.length}</span>
+      </div>
+      {ajuda && <p className="text-xs text-grafite-800/50 mb-3">{ajuda}</p>}
+      {grupos.length === 0 ? (
+        <p className="text-sm text-grafite-800/40 py-3 text-center">Nenhum pedido nesta etapa.</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <label className="flex items-center gap-2 text-xs text-grafite-800/60 cursor-pointer">
+              <input type="checkbox" checked={allSel} onChange={toggleAll} /> Selecionar todos
+            </label>
+            <button className="btn btn-primary btn-sm" disabled={nSel === 0} onClick={exec}>
+              {botaoLabel}{nSel > 0 ? ` (${nSel})` : ''}
+            </button>
+          </div>
+          <div className="space-y-2">
+            {grupos.map((itensPedido) => {
+              const cab = itensPedido[0];
+              const checked = sel.has(cab.pedidoId);
+              return (
+                <div key={cab.pedidoId} className={`rounded-lg border overflow-hidden ${checked ? 'border-marca-400 ring-1 ring-marca-200' : 'border-grafite-900/10'}`}>
+                  <label className="flex items-center gap-2 px-3 py-1.5 bg-base-100 border-b border-grafite-900/5 cursor-pointer">
+                    <input type="checkbox" checked={checked} onChange={() => toggle(cab.pedidoId)} />
+                    <span className="badge badge-baixo">{cab.plataformaNome}</span>
+                    <span className="text-xs text-grafite-800/50 truncate flex-1">{cab.numeroPedido}</span>
+                    <PrazoPedido prazoEnvio={cab.prazoEnvio} />
+                    {onDesfazer && (
+                      <button type="button" className="text-xs text-grafite-800/40 hover:text-marca-600 ml-1 px-1" title={desfazerLabel} onClick={(e) => { e.preventDefault(); onDesfazer(cab.pedidoId); }}>↩</button>
+                    )}
+                  </label>
+                  <div className="px-3 py-1.5">
+                    {itensPedido.map((it) => (
+                      <div key={it.id} className="text-sm text-grafite-800/80">{(it.semVinculo ? it.nomePlataforma : it.produtoNome)} × {numero(it.quantidade)}</div>
+                    ))}
+                    {cab.observacao && <div className="text-xs text-amber-700 mt-1 whitespace-pre-wrap">📝 {cab.observacao}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Modal para escolher o filamento usado nas páginas do álbum (desconta os gramas configurados).
 function ModalPaginas({ item, filamentos, onClose, onConfirmar }) {
   const [filamentoId, setFilamentoId] = useState('');
@@ -788,6 +854,29 @@ export default function Dashboard() {
     } catch (e) { toast.erro(e.message); }
   }
 
+  async function emitirNotasLote(ids) {
+    try {
+      const r = await api.post('/producao/lote/notas', { pedidoIds: ids });
+      toast.sucesso(`${r.processados} nota(s) emitida(s).`);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+  async function gerarEtiquetasLote(ids) {
+    try {
+      const r = await api.post('/producao/lote/etiquetas', { pedidoIds: ids });
+      toast.sucesso(`${r.processados} etiqueta(s) gerada(s).`);
+      recarregarProducao();
+    } catch (e) { toast.erro(e.message); }
+  }
+  async function desfazerNota(pedidoId) {
+    try { await api.post(`/producao/pedido/${pedidoId}/nota/desfazer`, {}); recarregarProducao(); }
+    catch (e) { toast.erro(e.message); }
+  }
+  async function desfazerEtiqueta(pedidoId) {
+    try { await api.post(`/producao/pedido/${pedidoId}/etiqueta/desfazer`, {}); recarregarProducao(); }
+    catch (e) { toast.erro(e.message); }
+  }
+
   async function produzir(item) {
     try {
       await api.post(`/producao/${item.id}/produzir`, {});
@@ -832,8 +921,13 @@ export default function Dashboard() {
 
   if (!d) return <p className="text-grafite-800/60">Carregando...</p>;
 
-  const itensAProduzir = producao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
-  const itensAguardandoEnvio = producao.filter((it) => it.fase === 'AGUARDANDO_ENVIO');
+  // Pipeline: Emissão de nota -> Programação de envio (etiqueta) -> Produção. Cada etapa libera a próxima.
+  const gruposPipeline = [...agruparPorPedido(producao).values()];
+  const gruposEmissao = gruposPipeline.filter((g) => !g[0].notaEmitida);
+  const gruposProgramacao = gruposPipeline.filter((g) => g[0].notaEmitida && !g[0].etiquetaGerada);
+  const emProducao = producao.filter((it) => it.notaEmitida && it.etiquetaGerada);
+  const itensAProduzir = emProducao.filter((it) => it.fase !== 'AGUARDANDO_ENVIO');
+  const itensAguardandoEnvio = emProducao.filter((it) => it.fase === 'AGUARDANDO_ENVIO');
 
   // Contagem de PEDIDOS a enviar (pelo número do pedido, não por SKU). Itens de SKUs
   // diferentes que pertencem ao mesmo número de pedido contam como um único pedido.
@@ -909,10 +1003,26 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
+        <SecaoLote
+          titulo="Emissão de notas"
+          ajuda="Pedidos novos entram aqui. Selecione e emita as notas — depois o pedido vai para a programação de envio."
+          grupos={gruposEmissao}
+          botaoLabel="Emitir notas"
+          onExecutar={emitirNotasLote}
+        />
+        <SecaoLote
+          titulo="Programação de envio"
+          ajuda="Com a nota emitida, selecione e gere as etiquetas. Depois o pedido cai na produção."
+          grupos={gruposProgramacao}
+          botaoLabel="Gerar etiquetas"
+          onExecutar={gerarEtiquetasLote}
+          onDesfazer={desfazerNota}
+          desfazerLabel="Desfazer nota (voltar para emissão)"
+        />
         <NotasCard />
         <SecaoAProduzir itens={itensAProduzir} onProduzir={produzir} onFinalizar={finalizar} onEmbalar={embalar} onNovoPedido={() => setModalPedidoManual(true)} onEditar={setPedidoEditando} onExcluir={excluir}
           onCapa={marcarCapa} onPaginas={(it) => setPaginasModal(it)} onDesfazerPaginas={desfazerPaginas} onFoto={(it) => setFotoModal(it)} onEtiqueta={marcarEtiqueta}
-          onDesfazerProduzir={desfazerProduzir} onDesfazerFinalizar={desfazerFinalizar} />
+          onDesfazerProduzir={desfazerProduzir} onDesfazerFinalizar={desfazerFinalizar} onDesfazerEtiqueta={desfazerEtiqueta} />
         <SecaoAguardandoEnvio itens={itensAguardandoEnvio} onEnviarPedido={setEnviandoPedido} onEditar={setPedidoEditando} onExcluir={excluir} />
 
         <div className="card">

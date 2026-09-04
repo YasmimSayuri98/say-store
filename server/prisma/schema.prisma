@@ -372,6 +372,11 @@ model PedidoPlataforma {
   prazoEnvio   DateTime?
   dataPedido   DateTime?
   observacao   String?   // anotações do pedido (ex.: cadastro manual), exibidas na lista de produção
+  // Pipeline do Dashboard: Emissão de nota -> Programação de envio (etiqueta) -> Produção
+  notaEmitida      Boolean   @default(false)
+  notaEmitidaEm    DateTime?
+  etiquetaGerada   Boolean   @default(false)
+  etiquetaGeradaEm DateTime?
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
