@@ -5,6 +5,7 @@ const { parseDataDia } = require('../utils/data');
 const { aplicarEmbalagens } = require('../services/embalagemService');
 const { marcarProduzido, desfazerProduzido, descontarMateriais, estornarMateriais } = require('../services/producaoEstoqueService');
 const { custoFinalProduto, financeiroUnitario } = require('../services/precoService');
+const { baixarEtiquetas: baixarEtiquetasPlataforma } = require('../services/plataformaSyncService');
 const router = express.Router();
 
 // Álbuns têm produção em duas partes (capa + páginas). Identificados pelo prefixo do SKU.
@@ -148,17 +149,50 @@ router.post('/lote/notas', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Lote: gerar/imprimir etiquetas dos pedidos selecionados (pré-requisito: nota emitida).
+// Lote: gerar/baixar etiquetas dos pedidos selecionados (pré-requisito: nota emitida).
+// Para pedidos Shopee com integração ativa, baixa a etiqueta OFICIAL (PDF) pela API da Shopee
+// (o envio deve ter sido arranjado antes, ex.: pelo UpSeller). Retorna o PDF em base64.
 router.post('/lote/etiquetas', async (req, res, next) => {
   try {
     const ids = (Array.isArray(req.body.pedidoIds) ? req.body.pedidoIds : []).map(Number).filter(Boolean);
     if (ids.length === 0) return res.status(400).json({ erro: 'Selecione ao menos um pedido.' });
-    const r = await prisma.pedidoPlataforma.updateMany({
+
+    const pedidos = await prisma.pedidoPlataforma.findMany({
       where: { id: { in: ids }, notaEmitida: true, etiquetaGerada: false },
+      include: { plataforma: true },
+    });
+    if (pedidos.length === 0) return res.json({ processados: 0, pdfBase64: null });
+
+    // Agrupa por plataforma que tenha integração Shopee ativa (para baixar a etiqueta oficial).
+    const shopeePorPlataforma = new Map(); // plataformaId -> [{id, numeroPedido}]
+    const semApi = []; // pedidos sem etiqueta oficial (TikTok/manual): só avançam a etapa
+    for (const p of pedidos) {
+      const integ = await prisma.integracaoPlataforma.findUnique({ where: { plataformaId: p.plataformaId } });
+      if (integ && integ.tipo === 'SHOPEE' && integ.ativo) {
+        if (!shopeePorPlataforma.has(p.plataformaId)) shopeePorPlataforma.set(p.plataformaId, []);
+        shopeePorPlataforma.get(p.plataformaId).push({ id: p.id, numeroPedido: p.numeroPedido });
+      } else {
+        semApi.push(p.id);
+      }
+    }
+
+    let pdfBase64 = null;
+    const sucessoIds = [...semApi];
+    for (const [plataformaId, lista] of shopeePorPlataforma) {
+      const pdf = await baixarEtiquetasPlataforma(plataformaId, lista.map((x) => x.numeroPedido));
+      if (pdf) pdfBase64 = Buffer.from(pdf).toString('base64');
+      sucessoIds.push(...lista.map((x) => x.id));
+    }
+
+    await prisma.pedidoPlataforma.updateMany({
+      where: { id: { in: sucessoIds } },
       data: { etiquetaGerada: true, etiquetaGeradaEm: new Date() },
     });
-    res.json({ processados: r.count });
-  } catch (e) { next(e); }
+    res.json({ processados: sucessoIds.length, pdfBase64 });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ erro: e.message });
+    next(e);
+  }
 });
 
 // Desfaz a nota de um pedido (correção de clique). Também volta a etiqueta, pois depende da nota.

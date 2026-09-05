@@ -86,4 +86,13 @@ async function sincronizarTodasAtivas() {
   return resultados;
 }
 
-module.exports = { sincronizarPlataforma, sincronizarTodasAtivas };
+// Baixa as etiquetas oficiais (PDF) de uma lista de pedidos de uma plataforma. Só Shopee por ora.
+async function baixarEtiquetas(plataformaId, orderSns) {
+  const { cfg, adapter } = await obterConfigValida(plataformaId);
+  if (typeof adapter.baixarEtiquetas !== 'function') {
+    throw Object.assign(new Error('Esta plataforma ainda não suporta baixar etiqueta pela API.'), { status: 400 });
+  }
+  return adapter.baixarEtiquetas(cfg, orderSns);
+}
+
+module.exports = { sincronizarPlataforma, sincronizarTodasAtivas, obterConfigValida, baixarEtiquetas };

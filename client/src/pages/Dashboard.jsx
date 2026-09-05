@@ -38,6 +38,19 @@ const PRESETS = [
   { v: 'tudo', l: 'Tudo' },
 ];
 
+// Abre um PDF (base64) em nova aba para impressão/salvamento (ex.: etiqueta 10×15 da Shopee).
+function imprimirPdfBase64(base64) {
+  try {
+    const bytes = atob(base64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+    const win = window.open(url, '_blank');
+    if (!win) { const a = document.createElement('a'); a.href = url; a.download = 'etiquetas.pdf'; a.click(); }
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* ignore */ } }, 60000);
+  } catch { /* ignore */ }
+}
+
 // Título de bloco com destaque (fonte grande + barrinha da marca).
 function TituloBloco({ children, className = '' }) {
   return (
@@ -649,12 +662,19 @@ function ModalEnviar({ pedido, onClose, onEnviado }) {
 // `grupos` = lista de pedidos (cada um é um array de itens do mesmo pedido).
 function SecaoLote({ titulo, ajuda, grupos, botaoLabel, onExecutar, onDesfazer, desfazerLabel }) {
   const [sel, setSel] = useState(() => new Set());
+  const [processando, setProcessando] = useState(false);
   const ids = grupos.map((g) => g[0].pedidoId);
   const allSel = ids.length > 0 && ids.every((id) => sel.has(id));
   const nSel = ids.filter((id) => sel.has(id)).length;
   function toggle(id) { setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
   function toggleAll() { setSel(allSel ? new Set() : new Set(ids)); }
-  function exec() { const arr = ids.filter((id) => sel.has(id)); if (!arr.length) return; onExecutar(arr); setSel(new Set()); }
+  async function exec() {
+    const arr = ids.filter((id) => sel.has(id));
+    if (!arr.length) return;
+    setProcessando(true);
+    try { await onExecutar(arr); setSel(new Set()); }
+    finally { setProcessando(false); }
+  }
 
   return (
     <div className="card lg:col-span-2">
@@ -671,8 +691,8 @@ function SecaoLote({ titulo, ajuda, grupos, botaoLabel, onExecutar, onDesfazer, 
             <label className="flex items-center gap-2 text-xs text-grafite-800/60 cursor-pointer">
               <input type="checkbox" checked={allSel} onChange={toggleAll} /> Selecionar todos
             </label>
-            <button className="btn btn-primary btn-sm" disabled={nSel === 0} onClick={exec}>
-              {botaoLabel}{nSel > 0 ? ` (${nSel})` : ''}
+            <button className="btn btn-primary btn-sm" disabled={nSel === 0 || processando} onClick={exec}>
+              {processando ? 'Processando…' : `${botaoLabel}${nSel > 0 ? ` (${nSel})` : ''}`}
             </button>
           </div>
           <div className="space-y-2">
@@ -865,6 +885,7 @@ export default function Dashboard() {
     try {
       const r = await api.post('/producao/lote/etiquetas', { pedidoIds: ids });
       toast.sucesso(`${r.processados} etiqueta(s) gerada(s).`);
+      if (r.pdfBase64) imprimirPdfBase64(r.pdfBase64);
       recarregarProducao();
     } catch (e) { toast.erro(e.message); }
   }

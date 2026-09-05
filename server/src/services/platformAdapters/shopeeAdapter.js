@@ -40,6 +40,77 @@ async function chamar(path, { method = 'GET', query = {}, body, comShop = true, 
   return data;
 }
 
+// Igual a chamar(), mas retorna o corpo BINÁRIO (usado para baixar o PDF da etiqueta).
+// Se a Shopee responder JSON (erro), lança com a mensagem.
+async function chamarBinario(path, { method = 'POST', query = {}, body, cfg }) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = assinar(path, timestamp, cfg, true);
+  const params = new URLSearchParams({
+    partner_id: String(cfg.appId), timestamp: String(timestamp), sign,
+    shop_id: String(cfg.lojaId), access_token: cfg.accessToken,
+  });
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  }
+  const res = await fetch(`${HOST}${path}?${params.toString()}`, {
+    method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+  });
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    const data = await res.json();
+    throw Object.assign(
+      new Error(`Shopee API (${path}): ${data.error || 'erro'}${data.message ? ' - ' + data.message : ''}`),
+      { status: 502, apiError: data }
+    );
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+// Baixa a etiqueta oficial (PDF) dos pedidos informados. Pré-requisito: o envio já ter sido
+// arranjado na Shopee (ex.: pelo UpSeller) e o app ter a permissão de Logística habilitada.
+// Fluxo: descobrir o tipo do documento -> criar -> aguardar ficar pronto -> baixar o PDF.
+async function baixarEtiquetas(cfg, orderSns) {
+  const sns = [...new Set((orderSns || []).filter(Boolean))];
+  if (sns.length === 0) return null;
+
+  // 1) Tipo de documento sugerido por pedido (ex.: NORMAL_AIR_WAYBILL / THERMAL_AIR_WAYBILL).
+  const paramResp = await chamar('/api/v2/logistics/get_shipping_document_parameter', {
+    method: 'POST', cfg, body: { order_list: sns.map((sn) => ({ order_sn: sn })) },
+  });
+  const infoList = (paramResp.response && (paramResp.response.result_list || paramResp.response.info_list)) || [];
+  const tipoPorSn = new Map();
+  for (const info of infoList) {
+    const tipo = info.suggest_shipping_document_type
+      || (Array.isArray(info.selectable_shipping_document_type) && info.selectable_shipping_document_type[0])
+      || 'NORMAL_AIR_WAYBILL';
+    tipoPorSn.set(info.order_sn, tipo);
+  }
+  const tipoPadrao = tipoPorSn.get(sns[0]) || 'NORMAL_AIR_WAYBILL';
+  const orderList = sns.map((sn) => ({ order_sn: sn, shipping_document_type: tipoPorSn.get(sn) || tipoPadrao }));
+
+  // 2) Solicita a geração do documento.
+  await chamar('/api/v2/logistics/create_shipping_document', { method: 'POST', cfg, body: { order_list: orderList } });
+
+  // 3) Aguarda ficar pronto (a Shopee gera de forma assíncrona).
+  let pronto = false;
+  for (let tentativa = 0; tentativa < 12 && !pronto; tentativa++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const r = await chamar('/api/v2/logistics/get_shipping_document_result', { method: 'POST', cfg, body: { order_list: orderList } });
+    const results = (r.response && r.response.result_list) || [];
+    const falhou = results.find((x) => x.status === 'FAILED');
+    if (falhou) {
+      throw Object.assign(new Error(`A Shopee não gerou a etiqueta do pedido ${falhou.order_sn}: ${falhou.fail_error || falhou.fail_message || 'falha na geração'}.`), { status: 502 });
+    }
+    pronto = results.length > 0 && results.every((x) => x.status === 'READY');
+  }
+  if (!pronto) throw Object.assign(new Error('A Shopee ainda está gerando as etiquetas. Aguarde alguns segundos e clique novamente.'), { status: 504 });
+
+  // 4) Baixa o PDF (uma via para todos os pedidos do mesmo tipo).
+  return chamarBinario('/api/v2/logistics/download_shipping_document', {
+    method: 'POST', cfg, body: { shipping_document_type: tipoPadrao, order_list: sns.map((sn) => ({ order_sn: sn })) },
+  });
+}
+
 // Monta o link de autorização da loja: o usuário abre essa URL, loga como dono da loja Shopee,
 // aprova o acesso, e a Shopee redireciona para `redirectUri?code=...&shop_id=...`.
 function linkAutorizacao(cfg, redirectUri) {
@@ -201,4 +272,4 @@ async function buscarPedidos(cfg, { desde }) {
   return pedidosNormalizados;
 }
 
-module.exports = { tipo: 'SHOPEE', renovarToken, buscarPedidos, buscarProdutos, linkAutorizacao, trocarCodigoPorToken };
+module.exports = { tipo: 'SHOPEE', renovarToken, buscarPedidos, buscarProdutos, linkAutorizacao, trocarCodigoPorToken, baixarEtiquetas };

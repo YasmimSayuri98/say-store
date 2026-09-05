@@ -104,7 +104,12 @@
       "Bash(rm -f _perda_test.js)",
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('deps',p.dependencies\\);console.log\\('dev',p.devDependencies\\)\")",
       "Bash(node _pipe_setup.js)",
-      "Bash(rm -f _pipe_setup.js)"
+      "Bash(rm -f _pipe_setup.js)",
+      "Bash(node -c src/services/platformAdapters/shopeeAdapter.js)",
+      "Bash(node -c src/services/plataformaSyncService.js)",
+      "Bash(node -e \"require\\('./src/routes/producao.js'\\); console.log\\('require OK \\(sem ciclo\\)'\\)\")",
+      "Bash(node _etq_test.js)",
+      "Bash(rm -f _etq_test.js)"
     ]
   }
 }
