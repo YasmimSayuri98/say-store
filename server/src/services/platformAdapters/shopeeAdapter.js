@@ -88,8 +88,18 @@ async function baixarEtiquetas(cfg, orderSns) {
   const tipoPadrao = tipoPorSn.get(sns[0]) || 'NORMAL_AIR_WAYBILL';
   const orderList = sns.map((sn) => ({ order_sn: sn, shipping_document_type: tipoPorSn.get(sn) || tipoPadrao }));
 
-  // 2) Solicita a geração do documento.
-  await chamar('/api/v2/logistics/create_shipping_document', { method: 'POST', cfg, body: { order_list: orderList } });
+  // 2) Solicita a geração do documento. Em caso de "all failed", a Shopee coloca o motivo real
+  // de cada pedido em response.result_list — extraímos para uma mensagem clara.
+  try {
+    await chamar('/api/v2/logistics/create_shipping_document', { method: 'POST', cfg, body: { order_list: orderList } });
+  } catch (e) {
+    const results = e.apiError && e.apiError.response && e.apiError.response.result_list;
+    if (Array.isArray(results) && results.length) {
+      const motivos = results.map((x) => `pedido ${x.order_sn}: ${x.fail_error || x.fail_message || 'falha'}`).join(' | ');
+      throw Object.assign(new Error(`Shopee recusou gerar a etiqueta (tipo ${tipoPadrao}) — ${motivos}`), { status: 502 });
+    }
+    throw e;
+  }
 
   // 3) Aguarda ficar pronto (a Shopee gera de forma assíncrona).
   let pronto = false;
