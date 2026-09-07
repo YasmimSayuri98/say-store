@@ -250,6 +250,7 @@ function chkCls(ativo) {
 
 const ROTULO_FOTO = {
   IMPRESSA: { txt: '📷 Foto impressa', cls: 'bg-green-50 text-green-700 border-green-200' },
+  ENVIADA: { txt: '📨 Foto enviada', cls: 'bg-marca-50 text-marca-700 border-marca-200' },
   SEM_FOTO: { txt: 'Sem foto', cls: 'bg-base-100 text-grafite-800/60 border-grafite-900/10' },
   CLIENTE_NAO_ENVIOU: { txt: '⚠️ Cliente não enviou', cls: 'bg-red-50 text-red-600 border-red-200' },
 };
@@ -760,6 +761,7 @@ function ModalPaginas({ item, filamentos, onClose, onConfirmar }) {
 // Modal para definir a situação da foto do cliente.
 function ModalFoto({ item, onClose, onDefinir }) {
   const opcoes = [
+    { v: 'ENVIADA', l: '📨 Foto enviada', d: 'O cliente enviou a foto (ainda não impressa).' },
     { v: 'IMPRESSA', l: '📷 Foto impressa', d: 'A foto do cliente foi impressa.' },
     { v: 'SEM_FOTO', l: 'Pedido sem foto', d: 'Este pedido não leva foto.' },
     { v: 'CLIENTE_NAO_ENVIOU', l: '⚠️ Cliente não enviou a foto', d: 'Aguardando/sem foto do cliente.' },

@@ -10,7 +10,7 @@ export default function EnvioDetalhe() {
   if (!envio) return <p>Carregando...</p>;
 
   const temFinanceiro = envio.plataforma || envio.faturamentoBruto > 0;
-  const rotuloFoto = { IMPRESSA: '📷 Foto impressa', SEM_FOTO: 'Sem foto', CLIENTE_NAO_ENVIOU: '⚠️ Cliente não enviou a foto' };
+  const rotuloFoto = { IMPRESSA: '📷 Foto impressa', ENVIADA: '📨 Foto enviada', SEM_FOTO: 'Sem foto', CLIENTE_NAO_ENVIOU: '⚠️ Cliente não enviou a foto' };
   const itensPed = envio.itensPedidosPlataforma || [];
   const temInfoFoto = itensPed.some((i) => i.fotoStatus);
 

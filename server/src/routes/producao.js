@@ -342,7 +342,7 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
 
 // Define o status da foto do cliente: IMPRESSA | SEM_FOTO | CLIENTE_NAO_ENVIOU (ou vazio p/ limpar).
 // Mantém fotoImpressa em sincronia (true só quando IMPRESSA). Não mexe no estoque.
-const STATUS_FOTO = ['IMPRESSA', 'SEM_FOTO', 'CLIENTE_NAO_ENVIOU'];
+const STATUS_FOTO = ['IMPRESSA', 'ENVIADA', 'SEM_FOTO', 'CLIENTE_NAO_ENVIOU'];
 router.post('/:itemId/foto', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
