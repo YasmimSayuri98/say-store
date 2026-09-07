@@ -1033,9 +1033,9 @@ export default function Dashboard() {
         />
         <SecaoLote
           titulo="Programação de envio"
-          ajuda="Com a nota emitida, selecione e gere as etiquetas. Depois o pedido cai na produção."
+          ajuda="Com a nota emitida, selecione e envie os pedidos para a produção. (A etiqueta oficial da Shopee está no backlog.)"
           grupos={gruposProgramacao}
-          botaoLabel="Gerar etiquetas"
+          botaoLabel="Enviar para produção"
           onExecutar={gerarEtiquetasLote}
           onDesfazer={desfazerNota}
           desfazerLabel="Desfazer nota (voltar para emissão)"
