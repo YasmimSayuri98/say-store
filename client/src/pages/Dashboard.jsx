@@ -257,7 +257,7 @@ const ROTULO_FOTO = {
 };
 // Botão/etiqueta da situação da foto do cliente. Abre o card de opções ao clicar.
 function BotaoFoto({ it, onFoto }) {
-  const info = it.fotoStatus ? ROTULO_FOTO[it.fotoStatus] : { txt: '📷 Definir foto', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+  const info = ROTULO_FOTO[it.fotoStatus] || { txt: '📷 Definir foto', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
   return (
     <button onClick={() => onFoto(it)} className={`text-xs border rounded-full px-2 py-0.5 font-medium hover:opacity-80 ${info.cls}`}>
       {info.txt}
