@@ -250,7 +250,8 @@ function chkCls(ativo) {
 
 const ROTULO_FOTO = {
   IMPRESSA: { txt: '📷 Foto impressa', cls: 'bg-green-50 text-green-700 border-green-200' },
-  ENVIADA: { txt: '📨 Foto enviada', cls: 'bg-marca-50 text-marca-700 border-marca-200' },
+  SALVA: { txt: '💾 Foto salva', cls: 'bg-marca-50 text-marca-700 border-marca-200' },
+  AGUARDANDO: { txt: '⏳ Aguardando foto', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
   SEM_FOTO: { txt: 'Sem foto', cls: 'bg-base-100 text-grafite-800/60 border-grafite-900/10' },
   CLIENTE_NAO_ENVIOU: { txt: '⚠️ Cliente não enviou', cls: 'bg-red-50 text-red-600 border-red-200' },
 };
@@ -370,15 +371,21 @@ function SecaoAProduzir({ itens, onProduzir, onFinalizar, onEmbalar, onNovoPedid
                                 );
                               })()}
 
-                              <label className={chkCls(!it.embalado && !it.semVinculo && it.finalizado)}>
-                                <input
-                                  type="checkbox"
-                                  checked={it.embalado}
-                                  disabled={it.embalado || it.semVinculo || !it.finalizado}
-                                  onChange={() => onEmbalar(it)}
-                                />
-                                Embalado
-                              </label>
+                              {(() => {
+                                const fotoOkEnvio = !it.personalizado || it.fotoStatus === 'IMPRESSA' || it.fotoStatus === 'SEM_FOTO';
+                                const podeEmbalar = !it.embalado && !it.semVinculo && it.finalizado && fotoOkEnvio;
+                                return (
+                                  <label className={chkCls(podeEmbalar)} title={!fotoOkEnvio && it.finalizado ? 'Só embala com a foto impressa ou pedido sem foto' : ''}>
+                                    <input
+                                      type="checkbox"
+                                      checked={it.embalado}
+                                      disabled={it.embalado || it.semVinculo || !it.finalizado || !fotoOkEnvio}
+                                      onChange={() => onEmbalar(it)}
+                                    />
+                                    Embalado
+                                  </label>
+                                );
+                              })()}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -761,10 +768,11 @@ function ModalPaginas({ item, filamentos, onClose, onConfirmar }) {
 // Modal para definir a situação da foto do cliente.
 function ModalFoto({ item, onClose, onDefinir }) {
   const opcoes = [
-    { v: 'ENVIADA', l: '📨 Foto enviada', d: 'O cliente enviou a foto (ainda não impressa).' },
+    { v: 'AGUARDANDO', l: '⏳ Aguardando foto do cliente', d: 'Ainda não recebeu a foto do cliente.' },
+    { v: 'SALVA', l: '💾 Foto salva', d: 'A foto do cliente foi salva (ainda não impressa).' },
     { v: 'IMPRESSA', l: '📷 Foto impressa', d: 'A foto do cliente foi impressa.' },
     { v: 'SEM_FOTO', l: 'Pedido sem foto', d: 'Este pedido não leva foto.' },
-    { v: 'CLIENTE_NAO_ENVIOU', l: '⚠️ Cliente não enviou a foto', d: 'Aguardando/sem foto do cliente.' },
+    { v: 'CLIENTE_NAO_ENVIOU', l: '⚠️ Cliente não enviou a foto', d: 'O cliente não enviou a foto.' },
   ];
   return (
     <Modal titulo="Situação da foto" onClose={onClose} largura="max-w-md">

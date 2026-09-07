@@ -342,7 +342,12 @@ router.post('/:itemId/foto-impressa/desfazer', async (req, res, next) => {
 
 // Define o status da foto do cliente: IMPRESSA | SEM_FOTO | CLIENTE_NAO_ENVIOU (ou vazio p/ limpar).
 // Mantém fotoImpressa em sincronia (true só quando IMPRESSA). Não mexe no estoque.
-const STATUS_FOTO = ['IMPRESSA', 'ENVIADA', 'SEM_FOTO', 'CLIENTE_NAO_ENVIOU'];
+const STATUS_FOTO = ['IMPRESSA', 'SALVA', 'AGUARDANDO', 'SEM_FOTO', 'CLIENTE_NAO_ENVIOU'];
+// Situações da foto que liberam embalar/enviar: só "impressa" ou "sem foto".
+function fotoLiberaEnvio(produto, fotoStatus) {
+  if (!produto || !produto.personalizado) return true; // produto sem foto do cliente: sem restrição
+  return fotoStatus === 'IMPRESSA' || fotoStatus === 'SEM_FOTO';
+}
 router.post('/:itemId/foto', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
@@ -582,10 +587,13 @@ router.post('/:itemId/finalizar/desfazer', async (req, res, next) => {
 router.post('/:itemId/embalar', async (req, res, next) => {
   try {
     const itemId = Number(req.params.itemId);
-    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId } });
+    const item = await prisma.itemPedidoPlataforma.findUnique({ where: { id: itemId }, include: { produto: true } });
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
     if (item.embalado) return res.status(409).json({ erro: 'Este item já foi marcado como embalado.' });
     if (!item.finalizado) return res.status(400).json({ erro: 'Marque como "finalizado" antes de embalar.' });
+    if (!fotoLiberaEnvio(item.produto, item.fotoStatus)) {
+      return res.status(400).json({ erro: 'Só é possível embalar com a foto "impressa" ou o pedido "sem foto".' });
+    }
     const atualizado = await prisma.itemPedidoPlataforma.update({
       where: { id: itemId }, data: { embalado: true, embaladoEm: new Date() },
     });
@@ -620,6 +628,7 @@ router.post('/:itemId/enviar', async (req, res, next) => {
       if (!item) throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
       if (item.enviado) throw Object.assign(new Error('Este item já foi marcado como enviado.'), { status: 409 });
       if (!item.embalado) throw Object.assign(new Error('Marque o pedido como embalado antes de enviar.'), { status: 400 });
+      if (!fotoLiberaEnvio(item.produto, item.fotoStatus)) throw Object.assign(new Error('Só é possível enviar com a foto "impressa" ou o pedido "sem foto".'), { status: 400 });
 
       // Embalagem é obrigatória no envio.
       const embsValidas = (Array.isArray(req.body.embalagens) ? req.body.embalagens : []).filter((e) => e && e.embalagemId && Number(e.quantidade) > 0);
@@ -700,6 +709,8 @@ router.post('/pedido/:pedidoId/enviar', async (req, res, next) => {
       // Itens prontos para enviar: embalados e ainda não enviados.
       const itensParaEnviar = pedido.itens.filter((it) => it.embalado && !it.enviado);
       if (itensParaEnviar.length === 0) throw Object.assign(new Error('Nenhum item embalado pendente de envio neste pedido.'), { status: 400 });
+      const bloqueado = itensParaEnviar.find((it) => !fotoLiberaEnvio(it.produto, it.fotoStatus));
+      if (bloqueado) throw Object.assign(new Error(`Só é possível enviar com a foto "impressa" ou "sem foto" (item ${bloqueado.produto ? bloqueado.produto.nome : bloqueado.skuPlataforma}).`), { status: 400 });
 
       // Embalagem é obrigatória no envio (uma vez para o pedido inteiro).
       const embsValidas = (Array.isArray(req.body.embalagens) ? req.body.embalagens : []).filter((e) => e && e.embalagemId && Number(e.quantidade) > 0);

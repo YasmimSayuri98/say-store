@@ -109,7 +109,9 @@
       "Bash(node -c src/services/plataformaSyncService.js)",
       "Bash(node -e \"require\\('./src/routes/producao.js'\\); console.log\\('require OK \\(sem ciclo\\)'\\)\")",
       "Bash(node _etq_test.js)",
-      "Bash(rm -f _etq_test.js)"
+      "Bash(rm -f _etq_test.js)",
+      "Bash(node _foto_test.js)",
+      "Bash(rm -f _foto_test.js)"
     ]
   }
 }
